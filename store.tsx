@@ -178,13 +178,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activeTeamId: profile?.active_team_id
       };
 
-      // EARLY EXIT: If profile incomplete (missing birthday), stop here
-      const isProfileIncomplete = !user.birthday;
-      if (isProfileIncomplete) {
-        console.log('[Store] [fetchUserData] status=incomplete_profile');
-        setState(prev => ({ ...prev, user }));
-        return;
-      }
+      // RELAXED: Continue sync even if profile is incomplete
+      console.log('[Store] [fetchUserData] status=continuing_sync');
 
       let activeTeamId = profile?.active_team_id || null;
       let team = null;
@@ -255,18 +250,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           try {
             console.log('[Store] [fetchUserData] step=members');
             const { data: mData, error: mErr } = await supabase
-              .from('memberships')
-              .select('user_id, role, profiles(email, display_name, birthday, avatar_url)')
+              .from('team_members_view')
+              .select('*')
               .eq('team_id', activeTeamId);
 
             if (mErr) throw mErr;
             if (mData) {
               teamMembers = mData.map((m: any) => ({
                 id: m.user_id,
-                email: m.profiles?.email || '',
-                name: m.profiles?.display_name || 'Miembro',
-                birthday: m.profiles?.birthday,
-                avatar: m.profiles?.avatar_url,
+                email: m.email || '',
+                name: m.display_name || 'Miembro',
+                birthday: m.birthday,
+                avatar: m.avatar_url,
                 role: m.role
               }));
             }

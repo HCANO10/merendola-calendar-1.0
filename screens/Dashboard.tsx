@@ -205,6 +205,17 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
+      {/* FLOATING ACTION BUTTON (MOBILE) */}
+      <button
+        onClick={() => {
+          setSelectedSlot(null);
+          setShowCreateModal(true);
+        }}
+        className="fixed bottom-8 right-8 z-[100] md:hidden bg-primary text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform border-4 border-white dark:border-slate-800"
+      >
+        <span className="material-symbols-outlined text-3xl font-black">add</span>
+      </button>
+
       {/* CREATE MODAL EXTRACTED */}
       <CreateEventModal
         isOpen={showCreateModal}

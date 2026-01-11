@@ -13,12 +13,12 @@ export const RequireProfile: React.FC<{ children: React.ReactNode }> = ({ childr
     if (authLoading) return null; // Wait for store to be ready
 
     const user = state.user;
-    const isProfileIncomplete = !user?.name || !user?.birthday || !user?.notificationEmail;
-
-    if (isProfileIncomplete) {
-        console.log('[Guard] Profile incomplete. Redirecting to /profile');
-        return <Navigate to="/profile" state={{ from: location }} replace />;
-    }
+    // RELAXED: Don't block access even if profile is incomplete
+    // const isProfileIncomplete = !user?.name || !user?.birthday;
+    // if (isProfileIncomplete) {
+    //     console.log('[Guard] Profile incomplete. Redirecting to /profile (Bypassed)');
+    //     // return <Navigate to="/profile" state={{ from: location }} replace />;
+    // }
 
     return <>{children}</>;
 };
