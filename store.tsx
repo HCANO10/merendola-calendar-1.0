@@ -276,7 +276,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const { data: eData, error: eErr } = await supabase
               .from('events')
               .select('*')
-              .eq('team_id', activeTeamId);
+              .eq('team_id', activeTeamId)
+              .order('start_time', { ascending: true });
 
             if (eErr) throw eErr;
             if (eData) {
@@ -286,8 +287,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 team_id: s.team_id,
                 title: s.title,
                 contribution: s.contribution || '',
-                date: s.date,
-                time: s.time,
+                date: s.start_time ? s.start_time.split('T')[0] : '',
+                time: s.start_time ? s.start_time.split('T')[1].substring(0, 5) : '',
                 description: s.description,
                 location: s.location,
                 userName: 'Compañero', // Simplificado

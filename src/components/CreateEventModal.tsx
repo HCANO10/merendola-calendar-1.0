@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SlotInfo } from 'react-big-calendar';
 import { format, addHours } from 'date-fns';
 import { supabase } from '../../supabaseClient';
@@ -26,6 +26,15 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
     if (!isOpen) return null;
 
+    const [startDateTime, setStartDateTime] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            const initialDate = selectedSlot?.start || new Date();
+            setStartDateTime(format(initialDate, "yyyy-MM-dd'T'HH:mm"));
+        }
+    }, [isOpen, selectedSlot]);
+
     // Default slot if none provided
     const effectiveSlot = selectedSlot || {
         start: new Date(),
@@ -40,8 +49,10 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
         setCreating(true);
         try {
             // 1. Insert event into Supabase
-            const startTime = effectiveSlot.start;
-            const endTime = effectiveSlot.end || addHours(startTime, 1);
+            // 1. Insert event into Supabase
+            // Use manual date time from input
+            const startTime = new Date(startDateTime);
+            const endTime = addHours(startTime, 2);
 
             const { data: newEvent, error: insertError } = await supabase
                 .from('events')
@@ -52,9 +63,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     description: description.trim(),
                     location: location.trim(),
                     start_time: startTime.toISOString(),
-                    end_time: endTime.toISOString(),
-                    date: format(startTime, 'yyyy-MM-dd'),
-                    time: format(startTime, 'HH:mm:ss')
+                    end_time: endTime.toISOString()
+                    // Fixed: Removed 'date' and 'time' columns which don't exist in SQL
                 })
                 .select()
                 .single();
@@ -70,11 +80,8 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
             // 3. Send Invitations
             if (recipientEmails.length > 0) {
                 await sendEventInvitation(
-                    {
-                        title: title.trim(),
-                        start_time: startTime.toISOString(),
-                        location: location.trim()
-                    },
+                    newEvent, // Use the actual DB event reference
+
                     state.team.name,
                     state.user.name || 'Un compañero',
                     recipientEmails
@@ -136,6 +143,17 @@ const CreateEventModal: React.FC<CreateEventModalProps> = ({
                             />
                             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">location_on</span>
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">¿Cuándo?</label>
+                        <input
+                            type="datetime-local"
+                            required
+                            value={startDateTime}
+                            onChange={(e) => setStartDateTime(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 h-16 rounded-2xl px-6 text-lg font-bold outline-none focus:border-primary transition-all"
+                        />
                     </div>
 
                     <div className="space-y-2">
