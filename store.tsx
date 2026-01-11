@@ -483,15 +483,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       description: snackData.description
     }]);
     if (error) throw error;
-    lastUserIdRef.current = null;
-    if (session?.user) fetchUserData(session.user.id);
+
+    // Recargar datos para ver el nuevo evento y sus participantes automáticos (trigger)
+    await fetchUserData(state.user.id);
   };
 
   const editSnack = useCallback((id: string, updates: Partial<Snack>) => {
     setState(prev => ({ ...prev, snacks: prev.snacks.map(s => s.id === id ? { ...s, ...updates } : s) }));
   }, []);
 
-  const deleteSnack = useCallback((id: string) => {
+  const deleteSnack = useCallback(async (id: string) => {
+    const { error } = await supabase.from('merendolas').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting snack:', error);
+      return;
+    }
     setState(prev => ({ ...prev, snacks: prev.snacks.filter(s => s.id !== id) }));
   }, []);
 
@@ -511,14 +517,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
   }, [state.user]);
 
-  const respondToInvite = useCallback((merendolaId: string, status: RSVPStatus) => {
+  const respondToInvite = useCallback(async (merendolaId: string, status: RSVPStatus) => {
     if (!state.user) return;
     const userId = state.user.id;
+
+    const { error } = await supabase
+      .from('attendees')
+      .upsert({
+        merendola_id: merendolaId,
+        user_id: userId,
+        status: status,
+        responded_at: new Date().toISOString()
+      }, { onConflict: 'merendola_id,user_id' });
+
+    if (error) {
+      console.error('Error responding to invite:', error);
+      return;
+    }
+
+    // Actualizar localmente para feedback inmediato
     setState(prev => {
       const existing = prev.invites.findIndex(i => i.merendolaId === merendolaId && i.userId === userId);
-      let newInvites = [...prev.invites];
-      const inviteData = { id: `inv_${merendolaId}_${userId}`, merendolaId, userId, status, respondedAt: new Date().toISOString() };
-      if (existing >= 0) newInvites[existing] = inviteData; else newInvites.push(inviteData);
+      const newInvites = [...prev.invites];
+      const inviteData = {
+        id: `att_${merendolaId}_${userId}`,
+        merendolaId,
+        userId,
+        status,
+        responded_at: new Date().toISOString()
+      };
+
+      if (existing >= 0) {
+        newInvites[existing] = inviteData;
+      } else {
+        newInvites.push(inviteData);
+      }
+
       return { ...prev, invites: newInvites };
     });
   }, [state.user]);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MainLayout from '../layouts/MainLayout';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
 import { useNavigate } from 'react-router-dom';
@@ -97,121 +98,107 @@ const TeamSetup: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark">
-      {toast && (
-        <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
-          }`}>
-          <span className="material-symbols-outlined">{toast.type === 'error' ? 'error' : 'check_circle'}</span>
-          <span className="font-bold">{toast.message}</span>
-        </div>
-      )}
-
-      <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a262f] px-10 py-3 sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <div className="text-primary">
-            <span className="material-symbols-outlined text-3xl">group</span>
+    <MainLayout>
+      <div className="flex flex-col min-h-full">
+        {toast && (
+          <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+            }`}>
+            <span className="material-symbols-outlined">{toast.type === 'error' ? 'error' : 'check_circle'}</span>
+            <span className="font-bold">{toast.message}</span>
           </div>
-          <h2 className="text-lg font-bold">{UI_TEXT.APP_NAME}</h2>
-        </div>
-        <button
-          onClick={async () => { await signOut(); }}
-          className="text-red-500 text-sm font-bold hover:bg-red-50 dark:hover:bg-red-500/10 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-sm">logout</span>
-          {UI_TEXT.PROFILE.LOGOUT}
-        </button>
-      </header>
+        )}
 
-      <main className="flex-1 flex flex-col items-center justify-center py-12 px-4 md:px-10">
-        <div className="w-full max-w-[520px] bg-white dark:bg-[#1a262f] rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 p-8">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold leading-tight">{UI_TEXT.TEAM_SETUP.TITLE}</h1>
-            <p className="text-[#60798a] dark:text-slate-400 mt-2">{UI_TEXT.TEAM_SETUP.SUBTITLE}</p>
-          </div>
-
-          <div className="mb-8">
-            <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 justify-center">
-              <button
-                onClick={() => setActiveTab('create')}
-                className={`flex flex-col items-center border-b-[3px] pb-3 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-[#60798a]'}`}
-              >
-                <p className="text-sm font-bold">{UI_TEXT.TEAM_SETUP.CREATE_TAB}</p>
-              </button>
-              <button
-                onClick={() => setActiveTab('join')}
-                className={`flex flex-col items-center border-b-[3px] pb-3 transition-colors ${activeTab === 'join' ? 'border-primary text-primary' : 'border-transparent text-[#60798a]'}`}
-              >
-                <p className="text-sm font-bold">{UI_TEXT.TEAM_SETUP.JOIN_TAB}</p>
-              </button>
+        <main className="flex-1 flex flex-col items-center justify-center py-12 px-4 md:px-10">
+          <div className="w-full max-w-[520px] bg-white dark:bg-[#1a262f] rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 p-8">
+            <div className="mb-8 text-center">
+              <h1 className="text-3xl font-bold leading-tight">{UI_TEXT.TEAM_SETUP.TITLE}</h1>
+              <p className="text-[#60798a] dark:text-slate-400 mt-2">{UI_TEXT.TEAM_SETUP.SUBTITLE}</p>
             </div>
-          </div>
 
-          {activeTab === 'create' ? (
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-end pb-1">
-                  <p className="text-sm font-semibold">{UI_TEXT.TEAM_SETUP.TEAM_NAME}</p>
-                  <p className="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">check</span> {UI_TEXT.TEAM_SETUP.AVAILABLE}
-                  </p>
+            <div className="mb-8">
+              <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 justify-center">
+                <button
+                  onClick={() => setActiveTab('create')}
+                  className={`flex flex-col items-center border-b-[3px] pb-3 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-[#60798a]'}`}
+                >
+                  <p className="text-sm font-bold">{UI_TEXT.TEAM_SETUP.CREATE_TAB}</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab('join')}
+                  className={`flex flex-col items-center border-b-[3px] pb-3 transition-colors ${activeTab === 'join' ? 'border-primary text-primary' : 'border-transparent text-[#60798a]'}`}
+                >
+                  <p className="text-sm font-bold">{UI_TEXT.TEAM_SETUP.JOIN_TAB}</p>
+                </button>
+              </div>
+            </div>
+
+            {activeTab === 'create' ? (
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-end pb-1">
+                    <p className="text-sm font-semibold">{UI_TEXT.TEAM_SETUP.TEAM_NAME}</p>
+                    <p className="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">check</span> {UI_TEXT.TEAM_SETUP.AVAILABLE}
+                    </p>
+                  </div>
+                  <input
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    value={teamName}
+                    onChange={(e) => setTeamName(e.target.value)}
+                    type="text"
+                    placeholder="Ej: Los Merendadores"
+                  />
                 </div>
-                <input
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  type="text"
-                  placeholder="Ej: Los Merendadores"
-                />
-              </div>
-              <button
-                onClick={handleCreate}
-                disabled={loading || !teamName.trim()}
-                className="w-full flex items-center justify-center bg-primary hover:bg-primary/90 text-white rounded-lg h-14 text-base font-bold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
-              >
-                {loading ? UI_TEXT.COMMON.LOADING : UI_TEXT.TEAM_SETUP.CREATE_BTN}
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <div className="flex border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-white/5">
                 <button
-                  onClick={() => setJoinMode('code')}
-                  className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'code' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
+                  onClick={handleCreate}
+                  disabled={loading || !teamName.trim()}
+                  className="w-full flex items-center justify-center bg-primary hover:bg-primary/90 text-white rounded-lg h-14 text-base font-bold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
                 >
-                  POR CÓDIGO
-                </button>
-                <button
-                  onClick={() => setJoinMode('handle')}
-                  className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'handle' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
-                >
-                  POR NOMBRE (@handle)
+                  {loading ? UI_TEXT.COMMON.LOADING : UI_TEXT.TEAM_SETUP.CREATE_BTN}
                 </button>
               </div>
+            ) : (
+              <div className="flex flex-col gap-6">
+                <div className="flex border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-white/5">
+                  <button
+                    onClick={() => setJoinMode('code')}
+                    className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'code' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
+                  >
+                    POR CÓDIGO
+                  </button>
+                  <button
+                    onClick={() => setJoinMode('handle')}
+                    className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'handle' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
+                  >
+                    POR NOMBRE (@handle)
+                  </button>
+                </div>
 
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  {joinMode === 'code' ? UI_TEXT.TEAM_SETUP.INVITE_CODE : 'Nombre del equipo (@handle)'}
-                </p>
-                <input
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-mono"
-                  placeholder={joinMode === 'code' ? 'ABC-123' : 'losmerendadores'}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(joinMode === 'code' ? e.target.value.toUpperCase() : e.target.value.toLowerCase())}
-                />
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-semibold">
+                    {joinMode === 'code' ? UI_TEXT.TEAM_SETUP.INVITE_CODE : 'Nombre del equipo (@handle)'}
+                  </p>
+                  <input
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-mono"
+                    placeholder={joinMode === 'code' ? 'ABC-123' : 'losmerendadores'}
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(joinMode === 'code' ? e.target.value.toUpperCase() : e.target.value.toLowerCase())}
+                  />
+                </div>
+                <button
+                  onClick={handleJoin}
+                  disabled={loading || !inputValue.trim()}
+                  className="w-full flex items-center justify-center bg-primary hover:bg-primary/90 text-white rounded-lg h-14 text-base font-bold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
+                >
+                  {loading ? UI_TEXT.COMMON.LOADING : UI_TEXT.TEAM_SETUP.JOIN_BTN}
+                </button>
               </div>
-              <button
-                onClick={handleJoin}
-                disabled={loading || !inputValue.trim()}
-                className="w-full flex items-center justify-center bg-primary hover:bg-primary/90 text-white rounded-lg h-14 text-base font-bold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
-              >
-                {loading ? UI_TEXT.COMMON.LOADING : UI_TEXT.TEAM_SETUP.JOIN_BTN}
-              </button>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </MainLayout>
   );
 };
 

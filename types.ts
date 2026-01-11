@@ -63,3 +63,19 @@ export interface Snack {
   comments: Comment[];
 }
 
+
+export interface SyncError {
+  step: string;
+  code?: string;
+  message: string;
+}
+
+export interface AppState {
+  user: User | null;
+  team: Team | null;
+  snacks: Snack[];
+  teamMembers: User[];
+  notifications: Notification[];
+  invites: Invite[];
+  syncError: SyncError | null;
+}

@@ -1,12 +1,13 @@
 
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { StoreProvider, useStore } from './store';
 import { supabase } from './supabaseClient';
 import SignIn from './screens/SignIn';
 import TeamSetup from './screens/TeamSetup';
 import Profile from './screens/Profile';
 import Dashboard from './screens/Dashboard';
+import MainLayout from './layouts/MainLayout';
 
 const AppRoutes: React.FC = () => {
   const { state, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, session } = useStore();
@@ -15,19 +16,17 @@ const AppRoutes: React.FC = () => {
   const [toast, setToast] = React.useState<string | null>(null);
 
   useEffect(() => {
-    // 0. Robust Recovery Detection
-    const hasRecoveryHash = window.location.hash.includes('type=recovery') ||
-      window.location.hash.includes('access_token=');
-
+    // 0. Recovery Mode (Always Priority)
+    const hasRecoveryHash = window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token=');
     if (hasRecoveryHash && !location.pathname.includes('reset-password')) {
       navigate('/reset-password' + window.location.hash, { replace: true });
       return;
     }
 
-    // Auth and Data Rules Navigation
+    // 1. Wait for Auth/DB
     if (authLoading || dbNotInitialized) return;
 
-    // 2. If NO SESSION -> Only allow public routes
+    // 2. Public Access Guard
     if (!session) {
       if (!['/', '/reset-password'].includes(location.pathname)) {
         navigate('/', { replace: true });
@@ -35,14 +34,13 @@ const AppRoutes: React.FC = () => {
       return;
     }
 
-    // 4. Evaluate data completeness (Guards)
+    // 3. Authenticated Sequence
     if (state.user) {
-      // Profile check (Required birthday and notificationEmail)
+      // STEP A: Profile Setup (Birthday is the blocker)
       const isProfileIncomplete = !state.user.birthday || !state.user.notificationEmail;
-
       if (isProfileIncomplete) {
         if (location.pathname !== '/profile') {
-          console.log('[App] Incomplete profile, redirecting to /profile');
+          console.log('[App] Guard: Profile incomplete -> Redirect to /profile');
           setToast("Completa tu perfil para continuar");
           setTimeout(() => setToast(null), 4000);
           navigate('/profile', { replace: true });
@@ -50,23 +48,24 @@ const AppRoutes: React.FC = () => {
         return;
       }
 
-      // Team check
+      // STEP B: Team Setup
       const hasNoTeam = !state.team && !state.user.activeTeamId;
       if (hasNoTeam) {
         if (location.pathname !== '/team-setup') {
-          console.log('[App] No team, redirecting to /team-setup');
+          console.log('[App] Guard: No team -> Redirect to /team-setup');
           navigate('/team-setup', { replace: true });
         }
         return;
       }
 
-      // Final success redirection
-      if (['/', '/reset-password', '/team-setup'].includes(location.pathname)) {
-        console.log('[App] Everything OK, redirecting to dashboard');
+      // STEP C: Fully Configured (Redirect to Dashboard if on setup pages)
+      const onSetupPage = ['/', '/reset-password', '/team-setup'].includes(location.pathname);
+      if (onSetupPage) {
+        console.log('[App] Guard: Ready -> Redirect to /dashboard');
         navigate('/dashboard', { replace: true });
       }
     }
-  }, [state.user, state.team, authLoading, dbNotInitialized, location.pathname, navigate, session, loadError]);
+  }, [state.user, state.team, authLoading, dbNotInitialized, location.pathname, navigate, session]);
 
   // DB Missing Screen (Critical Fix)
   if (dbNotInitialized) {
@@ -189,11 +188,16 @@ const AppRoutes: React.FC = () => {
         </div>
       )}
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<SignIn />} />
+        <Route path="/reset-password" element={<SignIn />} />
+
+        {/* Protected Routes */}
         <Route path="/team-setup" element={<TeamSetup />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/reset-password" element={<SignIn />} />
+
+        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
