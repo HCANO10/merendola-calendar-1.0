@@ -11,22 +11,38 @@ const TeamSetup: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teamName.trim()) return;
+    if (!teamName.trim() || !state.user?.id) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      await supabase.from('teams').insert({ name: teamName.trim() });
-      // The trigger handle_new_team automatically creates the membership and updates the profile's active_team_id
-      window.location.reload();
+      const { error } = await supabase
+        .from('teams')
+        .insert([
+          {
+            name: teamName.trim(),
+            created_by: state.user.id
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setToast("¡Equipo creado con éxito!");
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err: any) {
       console.error('Error creating team:', err);
-      setError(err.message || 'Error al crear el equipo');
+      alert('Error al crear el equipo: ' + err.message);
+      setError(err.message);
       setLoading(false);
     }
   };
@@ -39,23 +55,39 @@ const TeamSetup: React.FC = () => {
     setError(null);
 
     try {
+      // 1. Buscar equipo por join_code
       const { data: team, error: findErr } = await supabase
         .from('teams')
         .select('id')
-        .eq('invite_code', joinCode.trim().toUpperCase())
+        .eq('join_code', joinCode.trim().toUpperCase())
         .single();
 
       if (findErr || !team) throw new Error('Código de equipo no válido.');
 
-      await supabase.from('memberships').insert({
+      // 2. Insertar en memberships
+      const { error: memErr } = await supabase.from('memberships').insert({
         team_id: team.id,
         user_id: state.user.id
       });
 
-      window.location.reload();
+      if (memErr) throw memErr;
+
+      // 3. Update profiles set active_team_id
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({ active_team_id: team.id })
+        .eq('id', state.user.id);
+
+      if (profErr) throw profErr;
+
+      setToast("Te has unido al equipo.");
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (err: any) {
       console.error('Error joining team:', err);
-      setError(err.message || 'Error al unirse al equipo');
+      alert('Error al unirse: ' + err.message);
+      setError(err.message);
       setLoading(false);
     }
   };
@@ -117,6 +149,13 @@ const TeamSetup: React.FC = () => {
           <div className="mb-8 p-5 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-3xl text-red-600 dark:text-red-400 text-sm font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
             <span className="material-symbols-outlined">error</span>
             {error}
+          </div>
+        )}
+
+        {toast && (
+          <div className="mb-8 p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20 rounded-3xl text-emerald-600 dark:text-emerald-400 text-sm font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+            <span className="material-symbols-outlined">check_circle</span>
+            {toast}
           </div>
         )}
 

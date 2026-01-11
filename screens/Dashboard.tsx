@@ -41,6 +41,17 @@ const Dashboard: React.FC = () => {
   const [location, setLocation] = useState(''); // NEW: Location field
   const [toast, setToast] = useState<string | null>(null);
 
+  // Safety Guard: If team is not loaded, show loading state.
+  if (!state.team) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-950 h-full">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Cargando equipo...</p>
+      </div>
+    );
+  }
+
+
   const fetchDashboardData = async () => {
     if (!state.team?.id) return;
     setLoading(true);
@@ -79,7 +90,7 @@ const Dashboard: React.FC = () => {
       });
 
       // 3. Map Team Birthdays as All-Day Events
-      const birthdayEvents = state.teamMembers
+      const birthdayEvents = (state.teamMembers || [])
         .filter(member => member.birthday)
         .map(member => {
           const today = new Date();
@@ -103,6 +114,8 @@ const Dashboard: React.FC = () => {
       setEvents([...mappedMerendolas, ...birthdayEvents]);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Fallback for UI robustness
+      setEvents([]);
     } finally {
       setLoading(false);
     }
