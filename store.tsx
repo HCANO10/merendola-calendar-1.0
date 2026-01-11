@@ -19,8 +19,9 @@ interface StoreContextType {
   signOut: () => Promise<{ error: any }>;
   resetPasswordForEmail: (email: string) => Promise<{ data: any, error: any }>;
   updateUser: (updates: Partial<User>) => void;
-  createTeam: (name: string) => Promise<void>;
+  createTeam: (name: string) => Promise<{ id: string; handle: string; invite_code: string }>;
   joinTeam: (code: string) => Promise<void>;
+  joinTeamByHandle: (handle: string) => Promise<void>;
   setTeam: (team: Team) => void;
   addSnack: (snack: Omit<Snack, 'id' | 'userId' | 'teamId' | 'confirmedUserIds' | 'comments'>) => Promise<void>;
   editSnack: (id: string, updates: Partial<Snack>) => void;
@@ -385,21 +386,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const createTeam = async (name: string) => {
-    if (!state.user) return;
+    if (!state.user) throw new Error('Usuario no autenticado');
     try {
-      const { data: teamId, error } = await supabase.rpc('create_team', { team_name: name });
+      const { data, error } = await supabase.rpc('create_team', { team_name: name });
 
       if (error) {
-        if (error.code === 'PGRST104' || error.message?.includes('does not exist')) {
-          throw new Error('CONFIG_ERROR: La función create_team no existe en Supabase. Ejecuta el SQL y NOTIFY pgrst.');
+        const err = error as any;
+        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
+          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
         }
         throw error;
       }
 
-      if (teamId) {
+      if (data) {
         lastUserIdRef.current = null;
         if (session?.user) await fetchUserData(session.user.id);
+        return data as { id: string; handle: string; invite_code: string };
       }
+      throw new Error('Error al crear el equipo');
     } catch (e) {
       console.error('[Store] createTeam error:', e);
       throw e;
@@ -409,12 +413,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const joinTeam = async (code: string) => {
     if (!state.user) return;
     try {
-      // Fixed argument name: invite_code
       const { data: teamId, error } = await supabase.rpc('join_team', { invite_code: code });
 
       if (error) {
-        if (error.code === 'PGRST104' || error.message?.includes('does not exist')) {
-          throw new Error('CONFIG_ERROR: La función join_team no existe en Supabase. Ejecuta el SQL y NOTIFY pgrst.');
+        const err = error as any;
+        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
+          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
         }
         throw error;
       }
@@ -425,6 +429,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch (e) {
       console.error('[Store] joinTeam error:', e);
+      throw e;
+    }
+  };
+
+  const joinTeamByHandle = async (handle: string) => {
+    if (!state.user) return;
+    try {
+      const { data: teamId, error } = await supabase.rpc('join_team_by_handle', { team_handle: handle });
+
+      if (error) {
+        const err = error as any;
+        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
+          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
+        }
+        throw error;
+      }
+
+      if (teamId) {
+        lastUserIdRef.current = null;
+        if (session?.user) await fetchUserData(session.user.id);
+      }
+    } catch (e) {
+      console.error('[Store] joinTeamByHandle error:', e);
       throw e;
     }
   };
@@ -539,7 +566,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <StoreContext.Provider value={{
-      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
+      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, joinTeamByHandle, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
     }}>
       {children}
     </StoreContext.Provider>

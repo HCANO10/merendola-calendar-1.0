@@ -8,6 +8,7 @@ drop trigger if exists on_merendola_created on merendolas;
 drop function if exists handle_new_merendola();
 drop function if exists create_team(text);
 drop function if exists join_team(text);
+drop function if exists join_team_by_handle(text);
 
 -- 1. PROFILES
 create table if not exists profiles (
@@ -25,6 +26,7 @@ create table if not exists profiles (
 create table if not exists teams (
   id uuid default gen_random_uuid() primary key,
   name text not null,
+  handle text unique not null,
   invite_code text unique not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -185,7 +187,7 @@ create policy "Update own status" on attendees for update using (
 
 -- CREATE TEAM
 create or replace function create_team(team_name text)
-returns uuid
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
@@ -193,15 +195,27 @@ as $$
 declare
   new_team_id uuid;
   new_code text;
+  new_handle text;
+  base_handle text;
 begin
   if length(team_name) < 3 then
     raise exception 'El nombre del equipo debe tener al menos 3 caracteres.';
   end if;
 
-  new_code := upper(substring(team_name from 1 for 3)) || '-' || floor(random() * 8999 + 1000)::text;
+  -- Generate base handle (slugify-like)
+  base_handle := lower(regexp_replace(team_name, '[^a-zA-Z0-9]', '', 'g'));
+  if base_handle = '' then base_handle := 'equipo'; end if;
   
-  insert into teams (name, invite_code)
-  values (team_name, new_code)
+  -- Ensure unique handle
+  new_handle := base_handle;
+  while exists (select 1 from teams where handle = new_handle) loop
+    new_handle := base_handle || floor(random() * 999)::text;
+  end loop;
+
+  new_code := upper(substring(base_handle from 1 for 3)) || '-' || floor(random() * 8999 + 1000)::text;
+  
+  insert into teams (name, handle, invite_code)
+  values (team_name, new_handle, new_code)
   returning id into new_team_id;
 
   insert into memberships (team_id, user_id, role)
@@ -209,15 +223,19 @@ begin
 
   update profiles set active_team_id = new_team_id where user_id = auth.uid();
 
-  return new_team_id;
+  return jsonb_build_object(
+    'id', new_team_id,
+    'handle', new_handle,
+    'invite_code', new_code
+  );
 end;
 $$;
 revoke all on function create_team(text) from public;
 grant execute on function create_team(text) to authenticated;
 
 
--- JOIN TEAM (Normalized Input)
-create or replace function join_team(invite_code_input text)
+-- JOIN TEAM (By Code)
+create or replace function join_team(invite_code text)
 returns uuid
 language plpgsql
 security definer
@@ -227,30 +245,54 @@ declare
   target_team_id uuid;
   normalized_code text;
 begin
-  -- Normalize: Remove spaces and convert to UPPER
-  normalized_code := upper(trim(invite_code_input));
-
+  normalized_code := upper(trim(invite_code));
   select id into target_team_id from teams where invite_code = normalized_code limit 1;
 
   if target_team_id is null then
     raise exception 'Código de invitación inválido.';
   end if;
 
-  if exists (select 1 from memberships where team_id = target_team_id and user_id = auth.uid()) then
-     update profiles set active_team_id = target_team_id where user_id = auth.uid();
-     return target_team_id;
+  if not exists (select 1 from memberships where team_id = target_team_id and user_id = auth.uid()) then
+    insert into memberships (team_id, user_id, role)
+    values (target_team_id, auth.uid(), 'member');
   end if;
 
-  insert into memberships (team_id, user_id, role)
-  values (target_team_id, auth.uid(), 'member');
-
   update profiles set active_team_id = target_team_id where user_id = auth.uid();
-
   return target_team_id;
 end;
 $$;
 revoke all on function join_team(text) from public;
 grant execute on function join_team(text) to authenticated;
+
+-- JOIN TEAM BY HANDLE
+create or replace function join_team_by_handle(team_handle text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_team_id uuid;
+  normalized_handle text;
+begin
+  normalized_handle := lower(trim(team_handle));
+  select id into target_team_id from teams where handle = normalized_handle limit 1;
+
+  if target_team_id is null then
+    raise exception 'El equipo no existe.';
+  end if;
+
+  if not exists (select 1 from memberships where team_id = target_team_id and user_id = auth.uid()) then
+    insert into memberships (team_id, user_id, role)
+    values (target_team_id, auth.uid(), 'member');
+  end if;
+
+  update profiles set active_team_id = target_team_id where user_id = auth.uid();
+  return target_team_id;
+end;
+$$;
+revoke all on function join_team_by_handle(text) from public;
+grant execute on function join_team_by_handle(text) to authenticated;
 
 
 -- TRIGGERS (Hardened) --------------------------------------------------------

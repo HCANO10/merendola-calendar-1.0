@@ -1,16 +1,17 @@
-
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
 import { useNavigate } from 'react-router-dom';
 
 const TeamSetup: React.FC = () => {
-  const { createTeam, joinTeam, signOut } = useStore();
+  const { createTeam, joinTeam, joinTeamByHandle, signOut } = useStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('create');
+  const [joinMode, setJoinMode] = useState<'code' | 'handle'>('code');
   const [teamName, setTeamName] = useState('Los Merendadores');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [successData, setSuccessData] = useState<{ handle: string; invite_code: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
@@ -22,10 +23,9 @@ const TeamSetup: React.FC = () => {
     if (!teamName.trim()) return;
     setLoading(true);
     try {
-      await createTeam(teamName);
+      const data = await createTeam(teamName);
+      setSuccessData(data);
       showToast('¡Equipo creado con éxito!', 'success');
-      // Explicit redirect after success
-      setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
     } catch (e: any) {
       console.error(e);
       if (e.message?.includes('CONFIG_ERROR')) {
@@ -39,18 +39,22 @@ const TeamSetup: React.FC = () => {
   };
 
   const handleJoin = async () => {
-    if (!inviteCode.trim()) return;
+    if (!inputValue.trim()) return;
     setLoading(true);
     try {
-      await joinTeam(inviteCode);
+      if (joinMode === 'code') {
+        await joinTeam(inputValue);
+      } else {
+        await joinTeamByHandle(inputValue);
+      }
       showToast('¡Te has unido al equipo!', 'success');
       setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
     } catch (e: any) {
       console.error(e);
       if (e.message?.includes('CONFIG_ERROR')) {
         showToast(e.message);
-      } else if (e.message?.includes('inválido') || e.message?.includes('invalid')) {
-        showToast('Código de invitación inválido o expirado.');
+      } else if (e.message?.includes('inválido') || e.message?.includes('invalid') || e.message?.includes('existe')) {
+        showToast('Código o nombre de equipo inválido.');
       } else {
         showToast('Error al unirse: ' + (e.message || 'Error desconocido'));
       }
@@ -58,6 +62,41 @@ const TeamSetup: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (successData) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-8">
+          <span className="material-symbols-outlined text-5xl">celebration</span>
+        </div>
+        <h1 className="text-3xl font-bold mb-4">¡Equipo listo!</h1>
+        <p className="text-[#60798a] mb-10 max-w-sm">Comparte estos datos con tus amigos para que se unan.</p>
+
+        <div className="w-full max-w-md bg-white dark:bg-[#1a262f] rounded-2xl border border-slate-100 dark:border-slate-800 p-8 shadow-xl space-y-6 mb-10">
+          <div>
+            <p className="text-xs font-bold text-[#a0b3c1] uppercase tracking-widest mb-2">Nombre Único (Handle)</p>
+            <div className="bg-slate-50 dark:bg-white/5 py-4 px-6 rounded-xl font-mono text-xl font-bold text-primary">
+              @{successData.handle}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-[#a0b3c1] uppercase tracking-widest mb-2">Código de Invitación</p>
+            <div className="bg-slate-50 dark:bg-white/5 py-4 px-6 rounded-xl font-mono text-xl font-bold text-slate-800 dark:text-white">
+              {successData.invite_code}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => navigate('/dashboard', { replace: true })}
+          className="w-full max-w-md h-16 bg-primary text-white text-lg font-bold rounded-2xl shadow-xl shadow-primary/30 hover:bg-primary/90 transition-all flex items-center justify-center gap-3"
+        >
+          Ir al Dashboard
+          <span className="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark">
@@ -123,6 +162,7 @@ const TeamSetup: React.FC = () => {
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
                   type="text"
+                  placeholder="Ej: Los Merendadores"
                 />
               </div>
               <button
@@ -135,19 +175,36 @@ const TeamSetup: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col gap-6">
+              <div className="flex border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-white/5">
+                <button
+                  onClick={() => setJoinMode('code')}
+                  className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'code' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
+                >
+                  POR CÓDIGO
+                </button>
+                <button
+                  onClick={() => setJoinMode('handle')}
+                  className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all ${joinMode === 'handle' ? 'bg-white dark:bg-slate-800 shadow-sm text-primary' : 'text-[#60798a]'}`}
+                >
+                  POR NOMBRE (@handle)
+                </button>
+              </div>
+
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">{UI_TEXT.TEAM_SETUP.INVITE_CODE}</p>
+                <p className="text-sm font-semibold">
+                  {joinMode === 'code' ? UI_TEXT.TEAM_SETUP.INVITE_CODE : 'Nombre del equipo (@handle)'}
+                </p>
                 <input
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 font-mono uppercase outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="ABC-123"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#101a22] h-14 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-mono"
+                  placeholder={joinMode === 'code' ? 'ABC-123' : 'losmerendadores'}
                   type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(joinMode === 'code' ? e.target.value.toUpperCase() : e.target.value.toLowerCase())}
                 />
               </div>
               <button
                 onClick={handleJoin}
-                disabled={loading || !inviteCode.trim()}
+                disabled={loading || !inputValue.trim()}
                 className="w-full flex items-center justify-center bg-primary hover:bg-primary/90 text-white rounded-lg h-14 text-base font-bold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
               >
                 {loading ? UI_TEXT.COMMON.LOADING : UI_TEXT.TEAM_SETUP.JOIN_BTN}
@@ -159,4 +216,5 @@ const TeamSetup: React.FC = () => {
     </div>
   );
 };
+
 export default TeamSetup;
