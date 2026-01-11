@@ -1,66 +1,20 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, Outlet } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { StoreProvider, useStore } from './store';
 import SignIn from './screens/SignIn';
 import TeamSetup from './screens/TeamSetup';
 import Profile from './screens/Profile';
 import Dashboard from './screens/Dashboard';
 import MainLayout from './src/layouts/MainLayout';
+import { RequireProfile, RequireTeam } from './src/components/Guards';
 
 /**
  * AppRoutes handles the core navigation security and sequential data flow.
  * FLOW: Login -> Profile Setup -> Team Membership -> Dashboard.
  */
 const AppRoutes: React.FC = () => {
-  const { state, authLoading, session } = useStore();
-  const navigate = useNavigate();
+  const { authLoading, session } = useStore();
   const location = useLocation();
-
-  useEffect(() => {
-    // Step 0: Wait for authentication state to be determined
-    if (authLoading) return;
-
-    // Step 1: Unauthenticated users are forced to Login
-    if (!session) {
-      const isPublicRoute = ['/', '/reset-password'].includes(location.pathname);
-      if (!isPublicRoute) {
-        console.log('[Security] Guard: Session missing. Redirecting to Login.');
-        navigate('/', { replace: true });
-      }
-      return;
-    }
-
-    // Step 2: Authenticated users follow a strict setup sequence
-    if (state.user) {
-      // SEQUENTIAL CHECK A: Profile Completeness (Birthday blocker)
-      const needsProfileSetup = !state.user.birthday;
-      if (needsProfileSetup) {
-        if (location.pathname !== '/profile') {
-          console.log('[Security] Guard: Profile incomplete (No Birthday). Forcing /profile');
-          navigate('/profile', { replace: true });
-        }
-        return;
-      }
-
-      // SEQUENTIAL CHECK B: Team Membership
-      const needsTeamSetup = !state.team;
-      if (needsTeamSetup) {
-        if (location.pathname !== '/team-setup') {
-          console.log('[Security] Guard: No active team. Forcing /team-setup');
-          navigate('/team-setup', { replace: true });
-        }
-        return;
-      }
-
-      // STEP 3: Successful Onboarding -> Permit Dashboard access
-      // Redirect setup pages back to Dashboard if they try to access them while already setup
-      const setupPages = ['/', '/team-setup'];
-      if (setupPages.includes(location.pathname)) {
-        console.log('[Security] Guard: Setup complete. Redirecting to Dashboard.');
-        navigate('/dashboard', { replace: true });
-      }
-    }
-  }, [authLoading, session, state.user, state.team, location.pathname, navigate]);
 
   // Loading State
   if (authLoading) {
@@ -76,13 +30,31 @@ const AppRoutes: React.FC = () => {
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/" element={<SignIn />} />
+      <Route path="/" element={!session ? <SignIn /> : <Navigate to="/dashboard" replace />} />
       <Route path="/reset-password" element={<SignIn />} />
 
-      {/* Protected Flow */}
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/team-setup" element={<TeamSetup />} />
+      {/* Protected Routes (Require Session) */}
+      <Route element={session ? <MainLayout><Outlet /></MainLayout> : <Navigate to="/" state={{ from: location }} replace />}>
+
+        {/* Profile is the first step after login */}
+        <Route path="/profile" element={<Profile />} />
+
+        {/* Team Setup requires Profile to be complete */}
+        <Route path="/team-setup" element={
+          <RequireProfile>
+            <TeamSetup />
+          </RequireProfile>
+        } />
+
+        {/* Dashboard requires Profile AND Team to be complete */}
+        <Route path="/dashboard" element={
+          <RequireProfile>
+            <RequireTeam>
+              <Dashboard />
+            </RequireTeam>
+          </RequireProfile>
+        } />
+      </Route>
 
       {/* Global Redirect Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
