@@ -63,11 +63,3 @@ export interface Snack {
   comments: Comment[];
 }
 
-export interface AppState {
-  user: User | null;
-  team: Team | null;
-  snacks: Snack[];
-  teamMembers: User[];
-  notifications: Notification[];
-  invites: Invite[];
-}

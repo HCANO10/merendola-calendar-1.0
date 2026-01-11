@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, Team, Snack, AppState, Comment, Notification, Invite, RSVPStatus } from './types';
+import { User, Team, Snack, AppState, Comment, Notification, Invite, RSVPStatus, SyncError } from './types';
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
 
@@ -53,9 +53,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       snacks: [],
       teamMembers: MOCK_TEAM_MEMBERS,
       notifications: [],
-      invites: []
+      invites: [],
+      syncError: null
     };
-    return { ...initialState, teamMembers: MOCK_TEAM_MEMBERS };
+    return { ...initialState, teamMembers: MOCK_TEAM_MEMBERS, syncError: null };
   });
 
   const [loadError, setLoadError] = useState(false);
@@ -68,47 +69,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const lastUserIdRef = React.useRef<string | null>(null);
 
   const fetchUserData = useCallback(async (userId: string) => {
-    // 0. Loop Guard: If already fetching, or already loaded this user, skip
+    // 0. Loop Guard
     if (inFlightRef.current) return;
-
-    // Check if we already have this user's data and no error state
-    const alreadyLoaded = lastUserIdRef.current === userId &&
-      state.user?.id === userId &&
-      !loadError &&
-      !dbNotInitialized;
-
-    if (alreadyLoaded) {
-      setAuthLoading(false);
-      return;
-    }
 
     inFlightRef.current = true;
     lastUserIdRef.current = userId;
 
-    console.log(`[Store] fetchUserData Start: ${userId} at ${new Date().toISOString()}`);
+    console.log(`[Store] [fetchUserData] step=start userId=${userId}`);
 
-    // Safety timeout to avoid infinite loading
+    // Safety timeout
     const timeoutId = setTimeout(() => {
       setAuthLoading(false);
       setLoadError(true);
       inFlightRef.current = false;
+      setState(prev => ({
+        ...prev,
+        syncError: { step: 'timeout', message: 'La sincronización tardó demasiado (10s)' }
+      }));
       console.warn('[Store] fetchUserData timed out after 10s');
     }, 10000);
 
     setLoadError(false);
     setDbNotInitialized(false);
+    setState(prev => ({ ...prev, syncError: null }));
 
     try {
-      // 1. Set immediate user state from session to avoid "null" rebounces
+      // 1. Initial State from Session
+      console.log(`[Store] [fetchUserData] step=session`);
       const initialUser: User = {
         id: userId,
         email: session?.user?.email || '',
         name: session?.user?.email?.split('@')[0] || 'Usuario',
       };
-
       setState(prev => ({ ...prev, user: initialUser }));
 
-      // 2. Get Profile (Use maybeSingle to avoid 406)
+      // 2. Get Profile
+      console.log(`[Store] [fetchUserData] step=profile`);
       let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -116,7 +112,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .maybeSingle();
 
       if (profileError) {
-        // DETECT MISSING DATABASE / TABLE
         const isTableMissing = profileError.code === 'PGRST204' ||
           profileError.code === 'PGRST205' ||
           profileError.message?.includes('schema cache') ||
@@ -130,13 +125,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         console.error('Error fetching profile:', profileError);
+        setState(prev => ({
+          ...prev,
+          syncError: {
+            step: 'profile',
+            code: profileError?.code,
+            message: profileError?.message || 'Error al obtener el perfil'
+          }
+        }));
         setLoadError(true);
         return;
       }
 
-      // 3. Auto-create profile if missing (upsert)
+      // 3. Auto-create profile if missing
       if (!profile) {
-        console.log('Profile missing, creating auto-profile for:', userId);
+        console.log('[Store] [fetchUserData] step=profile_create');
         const { data: newProfile, error: insErr } = await supabase
           .from('profiles')
           .upsert(
@@ -148,28 +151,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (insErr) {
           console.error('Error creating auto-profile:', insErr);
+          setState(prev => ({
+            ...prev,
+            syncError: {
+              step: 'profile_create',
+              code: insErr.code,
+              message: insErr.message
+            }
+          }));
           setLoadError(true);
           return;
         }
         profile = newProfile;
-      }
-
-      let activeTeamId = profile?.active_team_id || null;
-
-      // 4. Fallback Team Selection: If no active_team_id, check memberships
-      if (!activeTeamId) {
-        console.log('No active team, checking memberships for:', userId);
-        const { data: mData } = await supabase
-          .from('memberships')
-          .select('team_id')
-          .eq('user_id', userId)
-          .limit(1);
-
-        if (mData && mData.length > 0) {
-          activeTeamId = mData[0].team_id;
-          console.log('Found team membership, setting as active:', activeTeamId);
-          await supabase.from('profiles').update({ active_team_id: activeTeamId }).eq('user_id', userId);
-        }
       }
 
       const user: User = {
@@ -179,8 +172,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         birthday: profile?.birthday,
         notificationEmail: profile?.notification_email,
         avatar: profile?.avatar_url,
-        activeTeamId: activeTeamId
+        activeTeamId: profile?.active_team_id
       };
+
+      // EARLY EXIT: If profile incomplete, stop here so UI can redirect
+      const isProfileIncomplete = !user.birthday || !user.notificationEmail;
+      if (isProfileIncomplete) {
+        console.log('[Store] [fetchUserData] status=incomplete_profile');
+        setState(prev => ({ ...prev, user }));
+        return;
+      }
+
+      let activeTeamId = profile?.active_team_id || null;
+
+      // 4. Fallback Team Selection
+      if (!activeTeamId) {
+        console.log('[Store] [fetchUserData] step=membership_fallback');
+        const { data: mData, error: mErr } = await supabase
+          .from('memberships')
+          .select('team_id')
+          .eq('user_id', userId)
+          .limit(1);
+
+        if (mErr) {
+          console.error('Error fetching memberships fallback:', mErr);
+        } else if (mData && mData.length > 0) {
+          activeTeamId = mData[0].team_id;
+          console.log('Found team membership, setting as active:', activeTeamId);
+          await supabase.from('profiles').update({ active_team_id: activeTeamId }).eq('user_id', userId);
+        }
+      }
 
       let team = null;
       let teamMembers: User[] = [];
@@ -189,6 +210,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // 5. Get Active Team Data
       if (activeTeamId) {
+        console.log('[Store] [fetchUserData] step=team');
         const { data: teamData, error: teamError } = await supabase
           .from('teams')
           .select('*')
@@ -197,7 +219,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (teamError) {
           console.error('Error fetching team:', teamError);
-          // Don't mark as loadError entirely, maybe team was deleted
+          setState(prev => ({
+            ...prev,
+            syncError: { step: 'team', code: teamError.code, message: teamError.message }
+          }));
         } else if (teamData) {
           team = {
             id: teamData.id,
@@ -207,6 +232,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
 
           // 6. Get Members
+          console.log('[Store] [fetchUserData] step=members');
           const { data: membersData, error: membersError } = await supabase
             .from('memberships')
             .select('user_id, profiles(display_name, birthday, avatar_url, notification_email, active_team_id)')
@@ -226,7 +252,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
           }
 
-          // 7. Get Merendolas (RLS filtered)
+          // 7. Get Merendolas
+          console.log('[Store] [fetchUserData] step=merendolas');
           const { data: snacksData, error: snacksError } = await supabase
             .from('merendolas')
             .select(`
@@ -273,26 +300,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         team,
         teamMembers,
         snacks,
-        invites
+        invites,
+        syncError: null
       }));
 
-      console.log(`[Store] fetchUserData End Success: ${userId}`);
-    } catch (error) {
+      console.log(`[Store] [fetchUserData] step=success userId=${userId}`);
+    } catch (error: any) {
       console.error('[Store] Fatal error in fetchUserData:', error);
+      setState(prev => ({
+        ...prev,
+        syncError: { step: 'fatal', message: error.message || 'Error fatal desconocido' }
+      }));
       setLoadError(true);
     } finally {
       clearTimeout(timeoutId);
       setAuthLoading(false);
       inFlightRef.current = false;
     }
-  }, [state.user?.id, loadError, dbNotInitialized]);
+  }, [session, state.user?.id, loadError, dbNotInitialized]);
 
-  // Handle Supabase Session (One-shot Init)
+  // Handle Supabase Session
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
-    console.log('[Store] AuthProvider Init', new Date().toISOString());
+    console.log('[Store] AuthProvider Init');
     let mounted = true;
 
     const initAuth = async () => {
@@ -301,9 +333,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        console.log('[Store] Initial Session:', initialSession?.user?.id || 'none');
         setSession(initialSession);
-
         if (initialSession?.user) {
           fetchUserData(initialSession.user.id);
         } else {
@@ -317,13 +347,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     initAuth();
 
-    // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log('[Store] Auth Event:', event, 'User:', newSession?.user?.id || 'none');
       if (!mounted) return;
-
       setSession(newSession);
-
       if (newSession?.user) {
         fetchUserData(newSession.user.id);
       } else {
@@ -334,7 +360,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           snacks: [],
           teamMembers: [],
           notifications: [],
-          invites: []
+          invites: [],
+          syncError: null
         });
       }
     });
@@ -343,9 +370,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []); // Strictly empty deps for one-shot init
+  }, [fetchUserData]);
 
-  // Persist State (Data)
+  // Persist State
   useEffect(() => {
     localStorage.setItem('merendola_state_v3', JSON.stringify(state));
   }, [state]);
@@ -369,7 +396,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return { error };
   };
 
-
   const updateUser = useCallback((updates: Partial<User>) => {
     setState(prev => ({
       ...prev,
@@ -392,22 +418,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     try {
       const { data, error } = await supabase.rpc('create_team', { team_name: teamNameTrimmed });
-
       if (error) {
         const err = error as any;
-        const isMissingRpc = err.code === 'PGRST104' ||
-          err.code === '42883' ||
-          err.message?.includes('does not exist') ||
-          err.message?.includes('Could not find the function') ||
-          err.message?.includes('schema cache') ||
-          err.status === 404;
-
+        const isMissingRpc = err.code === 'PGRST104' || err.code === '42883' ||
+          err.status === 404 || err.message?.includes('schema cache');
         if (isMissingRpc) {
-          throw new Error('CONFIG_ERROR: La función create_team no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
+          throw new Error('CONFIG_ERROR: La función create_team no existe.');
         }
         throw error;
       }
-
       if (data) {
         lastUserIdRef.current = null;
         if (session?.user) await fetchUserData(session.user.id);
@@ -423,26 +442,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const joinTeam = async (code: string) => {
     if (!state.user) return;
     const codeTrimmed = code.trim();
-    if (!codeTrimmed) throw new Error('Escribe un código de invitación');
-
     try {
       const { data: teamId, error } = await supabase.rpc('join_team', { invite_code: codeTrimmed });
-
-      if (error) {
-        const err = error as any;
-        const isMissingRpc = err.code === 'PGRST104' ||
-          err.code === '42883' ||
-          err.message?.includes('does not exist') ||
-          err.message?.includes('Could not find the function') ||
-          err.message?.includes('schema cache') ||
-          err.status === 404;
-
-        if (isMissingRpc) {
-          throw new Error('CONFIG_ERROR: La función join_team no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
-        }
-        throw error;
-      }
-
+      if (error) throw error;
       if (teamId) {
         lastUserIdRef.current = null;
         if (session?.user) await fetchUserData(session.user.id);
@@ -456,26 +458,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const joinTeamByHandle = async (handle: string) => {
     if (!state.user) return;
     const handleTrimmed = handle.trim();
-    if (!handleTrimmed) throw new Error('Escribe el nombre del equipo');
-
     try {
       const { data: teamId, error } = await supabase.rpc('join_team_by_handle', { team_handle: handleTrimmed });
-
-      if (error) {
-        const err = error as any;
-        const isMissingRpc = err.code === 'PGRST104' ||
-          err.code === '42883' ||
-          err.message?.includes('does not exist') ||
-          err.message?.includes('Could not find the function') ||
-          err.message?.includes('schema cache') ||
-          err.status === 404;
-
-        if (isMissingRpc) {
-          throw new Error('CONFIG_ERROR: La función join_team_by_handle no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
-        }
-        throw error;
-      }
-
+      if (error) throw error;
       if (teamId) {
         lastUserIdRef.current = null;
         if (session?.user) await fetchUserData(session.user.id);
@@ -488,8 +473,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addSnack = async (snackData: Omit<Snack, 'id' | 'userId' | 'teamId' | 'confirmedUserIds' | 'comments'>) => {
     if (!state.user || !state.team) return;
-
-    const { data, error } = await supabase.from('merendolas').insert([{
+    const { error } = await supabase.from('merendolas').insert([{
       team_id: state.team.id,
       user_id: state.user.id,
       title: snackData.eventTitle,
@@ -497,45 +481,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       date: snackData.date,
       time: snackData.time,
       description: snackData.description
-    }]).select().single();
-
-    if (error) {
-      console.error("Error adding snack:", error);
-      throw error;
-    }
-
-    // Trigger refetch
+    }]);
+    if (error) throw error;
     lastUserIdRef.current = null;
     if (session?.user) fetchUserData(session.user.id);
   };
 
   const editSnack = useCallback((id: string, updates: Partial<Snack>) => {
-    setState(prev => ({
-      ...prev,
-      snacks: prev.snacks.map(s => s.id === id ? { ...s, ...updates } : s)
-    }));
+    setState(prev => ({ ...prev, snacks: prev.snacks.map(s => s.id === id ? { ...s, ...updates } : s) }));
   }, []);
 
   const deleteSnack = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      snacks: prev.snacks.filter(s => s.id !== id)
-    }));
+    setState(prev => ({ ...prev, snacks: prev.snacks.filter(s => s.id !== id) }));
   }, []);
 
   const toggleAttendance = useCallback((snackId: string) => {
     if (!state.user) return;
-    const userId = state.user.id;
     setState(prev => ({
       ...prev,
       snacks: prev.snacks.map(s => {
         if (s.id !== snackId) return s;
+        const userId = state.user!.id;
         const exists = s.confirmedUserIds.includes(userId);
         return {
           ...s,
-          confirmedUserIds: exists
-            ? s.confirmedUserIds.filter(id => id !== userId)
-            : [...s.confirmedUserIds, userId]
+          confirmedUserIds: exists ? s.confirmedUserIds.filter(id => id !== userId) : [...s.confirmedUserIds, userId]
         };
       })
     }));
@@ -543,32 +513,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const respondToInvite = useCallback((merendolaId: string, status: RSVPStatus) => {
     if (!state.user) return;
-    const inviteId = `inv_${merendolaId}_${state.user.id}`;
-
+    const userId = state.user.id;
     setState(prev => {
-      const existingInviteIndex = prev.invites.findIndex(i => i.merendolaId === merendolaId && i.userId === state.user!.id);
+      const existing = prev.invites.findIndex(i => i.merendolaId === merendolaId && i.userId === userId);
       let newInvites = [...prev.invites];
-
-      const inviteData: Invite = {
-        id: inviteId,
-        merendolaId,
-        userId: state.user!.id,
-        status,
-        respondedAt: new Date().toISOString()
-      };
-
-      if (existingInviteIndex >= 0) {
-        newInvites[existingInviteIndex] = inviteData;
-      } else {
-        newInvites.push(inviteData);
-      }
-
-      // Also mark associated notifications as read
-      const newNotifications = prev.notifications.map(n =>
-        n.payload.merendolaId === merendolaId ? { ...n, readAt: new Date().toISOString() } : n
-      );
-
-      return { ...prev, invites: newInvites, notifications: newNotifications };
+      const inviteData = { id: `inv_${merendolaId}_${userId}`, merendolaId, userId, status, respondedAt: new Date().toISOString() };
+      if (existing >= 0) newInvites[existing] = inviteData; else newInvites.push(inviteData);
+      return { ...prev, invites: newInvites };
     });
   }, [state.user]);
 
@@ -581,13 +532,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addComment = useCallback((snackId: string, text: string) => {
     if (!state.user) return;
-    const newComment: Comment = {
-      id: Math.random().toString(36).substring(7),
-      userId: state.user.id,
-      userName: state.user.name || 'Usuario',
-      text,
-      timestamp: new Date().toISOString()
-    };
+    const newComment = { id: Math.random().toString(36).substring(7), userId: state.user.id, userName: state.user.name || 'Usuario', text, timestamp: new Date().toISOString() };
     setState(prev => ({
       ...prev,
       snacks: prev.snacks.map(s => s.id === snackId ? { ...s, comments: [...s.comments, newComment] } : s)
