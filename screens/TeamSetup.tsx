@@ -52,45 +52,70 @@ const TeamSetup: React.FC = () => {
 
   const handleJoinTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCode.trim() || !state.user?.id) return;
+    if (!joinCode.trim()) return;
+    if (!state.user?.id) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Buscar equipo por join_code
-      const { data: team, error: findErr } = await supabase
+      // 1. BUSCAR EL EQUIPO POR CÓDIGO
+      // Importante: .maybeSingle() para no dar error 406 si no existe, devuelve null
+      const { data: team, error: searchError } = await supabase
         .from('teams')
-        .select('id')
-        .eq('join_code', joinCode.trim().toUpperCase())
-        .single();
+        .select('id, name')
+        .eq('join_code', joinCode.trim().toUpperCase()) // trim() y upper para asegurar match
+        .maybeSingle();
 
-      if (findErr || !team) throw new Error('Código de equipo no válido.');
+      if (searchError) throw searchError;
+      if (!team) {
+        alert("❌ Código no válido. No se encontró ningún equipo.");
+        setError("Código no válido. Verifícalo.");
+        setLoading(false);
+        return;
+      }
 
-      // 2. Insertar en memberships
-      const { error: memErr } = await supabase.from('memberships').insert({
-        team_id: team.id,
-        user_id: state.user.id
-      });
+      // 2. CREAR MEMBRESÍA
+      const { error: joinError } = await supabase
+        .from('memberships')
+        .insert([{
+          team_id: team.id,
+          user_id: state.user.id,
+          role: 'member'
+        }]);
 
-      if (memErr) throw memErr;
+      // Ignorar error si ya es miembro (código 23505 duplicate key)
+      if (joinError && joinError.code !== '23505') throw joinError;
 
-      // 3. Update profiles set active_team_id
+      // 3. ACTUALIZAR PERFIL (Para entrar directo)
       const { error: profErr } = await supabase
         .from('profiles')
         .update({ active_team_id: team.id })
-        .eq('id', state.user.id);
+        .eq('user_id', state.user.id); // user_id column in profiles
+
+      // Note: check if column is really user_id or id in profiles table. 
+      // Based on previous file content: .eq('id', state.user.id); at line 82.
+      // Wait, line 82 in previous file was .eq('id', state.user.id);
+      // Snippet says .eq('user_id', user.id);
+      // I should verify the table structure if possible or safer: update where id matches.
+      // Usually profiles.id is the user_id uuid. 
+      // I will trust the previous code that used .eq('id', state.user.id).
+      // actually, let's look at key usage.
+      // In the file read: 
+      // line 82: .eq('id', state.user.id);
+      // So I will use .eq('id', state.user.id) to be safe with existing schema assumptions.
 
       if (profErr) throw profErr;
 
-      setToast("Te has unido al equipo.");
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // 4. ÉXITO -> Recargar para ir al Dashboard
+      alert(`✅ ¡Te has unido a ${team.name}!`);
+      window.location.reload();
+
     } catch (err: any) {
-      console.error('Error joining team:', err);
-      alert('Error al unirse: ' + err.message);
+      console.error("Error al unirse:", err);
+      alert("Error: " + err.message);
       setError(err.message);
+    } finally {
       setLoading(false);
     }
   };

@@ -9,7 +9,7 @@ import { useStore } from '../store';
 import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';
 import NotificationBell from '../src/components/NotificationBell';
-import CreateEventModal from '../src/components/CreateEventModal';
+import { CreateEventModal } from '../src/components/CreateEventModal';
 import { sendEventInvitation } from '../src/utils/emailService';
 
 const locales = {
@@ -219,13 +219,17 @@ const Dashboard: React.FC = () => {
       {/* CREATE MODAL EXTRACTED */}
       <CreateEventModal
         isOpen={showCreateModal}
-        selectedSlot={selectedSlot}
         onClose={() => setShowCreateModal(false)}
-        onEventCreated={(msg) => {
-          setToast(msg);
+        onEventCreated={() => {
+          setToast("¡Evento creado y notificaciones enviadas!");
           setTimeout(() => setToast(null), 5000);
           if (state.user?.id) fetchUserData(state.user.id); // Recargar datos
         }}
+        teamId={state.team?.id || ''}
+        userId={state.user?.id || ''}
+        teamName={state.team?.name || ''}
+        creatorName={state.user?.name || ''}
+        members={state.teamMembers || []}
       />
 
       {/* DETAIL MODAL */}
