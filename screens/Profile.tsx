@@ -42,7 +42,8 @@ const Profile: React.FC = () => {
         .update({
           display_name: name,
           birthday,
-          notification_email: notificationEmail
+          notification_email: notificationEmail,
+          "notificationEmail": notificationEmail // Safeguard for different schema versions
         })
         .eq('user_id', state.user.id);
 

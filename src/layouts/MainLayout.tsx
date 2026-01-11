@@ -28,9 +28,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     ];
 
     return (
-        <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
             {/* Sidebar */}
-            <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900 text-white flex flex-col z-50">
+            <aside className="w-64 flex-shrink-0 flex flex-col bg-slate-900 text-white z-50">
                 <div className="p-8">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
@@ -43,7 +43,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 py-4 space-y-1">
+                <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
                     {navLinks.map((link) => (
                         <NavLink
                             key={link.path}
@@ -73,8 +73,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 ml-64 min-h-screen flex flex-col">
-                <main className="flex-1">
+            <div className="flex-1 overflow-auto relative flex flex-col">
+                <main className="flex-1 min-h-full">
                     {children || <Outlet />}
                 </main>
             </div>

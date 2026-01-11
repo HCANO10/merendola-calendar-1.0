@@ -1,0 +1,1 @@
+ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS start_time timestamp with time zone; ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS end_time timestamp with time zone; ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES profiles(user_id);

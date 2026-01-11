@@ -34,6 +34,7 @@ const Dashboard: React.FC = () => {
   // Form state
   const [title, setTitle] = useState('');
   const [creating, setCreating] = useState(false);
+  const [description, setDescription] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
@@ -54,8 +55,9 @@ const Dashboard: React.FC = () => {
 
       // 2. Map Merendolas to Calendar Events
       const mappedMerendolas = (merendolas || []).map(m => {
-        const startDate = new Date(m.date + 'T' + (m.time || '00:00:00'));
-        const endDate = new Date(startDate.getTime() + 3600000); // 1 hour duration default
+        // Soporte para ambos formatos: start_time (ISO) o date+time (Legacy)
+        const startDate = m.start_time ? new Date(m.start_time) : new Date(m.date + 'T' + (m.time || '00:00:00'));
+        const endDate = m.end_time ? new Date(m.end_time) : new Date(startDate.getTime() + 3600000);
 
         return {
           id: m.id,
@@ -118,11 +120,15 @@ const Dashboard: React.FC = () => {
       const { error } = await supabase
         .from('merendolas')
         .insert({
-          title,
-          date: dateStr,
-          time: timeStr,
           team_id: state.team.id,
-          user_id: state.user.id
+          created_by: state.user.id,
+          user_id: state.user.id,
+          title: title,
+          start_time: selectedSlot.start.toISOString(),
+          end_time: selectedSlot.end.toISOString(),
+          date: format(selectedSlot.start, 'yyyy-MM-dd'),
+          time: format(selectedSlot.start, 'HH:mm:ss'),
+          description: description
         });
 
       if (error) throw error;
@@ -133,7 +139,9 @@ const Dashboard: React.FC = () => {
 
       setShowCreateModal(false);
       setTitle('');
-      fetchDashboardData();
+      setDescription('');
+      // Recarga vital para sincronizar estado global tras trigger
+      window.location.reload();
     } catch (error) {
       console.error('Error creating event:', error);
     } finally {
@@ -187,7 +195,7 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 md:p-8 bg-slate-50 dark:bg-[#0f172a]">
+    <div className="flex-1 flex flex-col h-full p-4 md:p-8 bg-slate-50 dark:bg-slate-950 overflow-auto">
       {toast && (
         <div className="fixed top-20 right-8 z-[100] bg-emerald-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-right-4">
           <span className="material-symbols-outlined font-bold">check_circle</span>
@@ -195,17 +203,49 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Panel de Información del Equipo */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 mb-8 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-4xl">groups</span>
+          </div>
+          <div>
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Panel del Equipo</h2>
+            <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{state.team?.name}</p>
+            <p className="text-xs text-slate-500 mt-2 font-medium">Gestiona y organiza las meriendas de tu comunidad en un solo lugar.</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
+          <div className="py-2">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
+            <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.inviteCode}</p>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(state.team?.inviteCode || '');
+              setToast("Código copiado al portapapeles");
+              setTimeout(() => setToast(null), 3000);
+            }}
+            className="h-14 px-4 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm hover:bg-primary hover:text-white transition-all group gap-2"
+            title="Copiar código"
+          >
+            <span className="material-symbols-outlined transition-transform group-active:scale-90">content_copy</span>
+            <span className="text-xs font-black uppercase">Copiar</span>
+          </button>
+        </div>
+      </div>
+
       <header className="mb-6 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white">Calendario de Merendolas</h1>
-          <p className="text-slate-500 dark:text-slate-400">Interactúa con los días para organizar o confirmar asistencia</p>
+          <h1 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Calendario Semanal</h1>
         </div>
-        <div className="flex gap-4">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <div className="w-3 h-3 rounded-full bg-amber-500"></div> Merienda
+        <div className="flex gap-6">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Merienda
           </div>
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <div className="w-3 h-3 rounded-full bg-pink-500"></div> Cumpleaños
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400">
+            <div className="w-2.5 h-2.5 rounded-full bg-pink-500"></div> Cumpleaños
           </div>
         </div>
       </header>
@@ -247,11 +287,18 @@ const Dashboard: React.FC = () => {
                 <label className="block text-xs font-black uppercase text-slate-400 mb-2">Título de la Merienda</label>
                 <input
                   autoFocus
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl h-14 px-6 font-bold text-lg outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl h-14 px-6 font-bold text-lg outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all mb-4"
                   placeholder="Ej: Brioches y Café"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
+                />
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">Descripción (Opcional)</label>
+                <textarea
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-6 font-medium text-sm outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all min-h-[100px] resize-none"
+                  placeholder="¿Qué traemos? ¿Alguna nota especial?"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
               <div className="flex gap-4">
