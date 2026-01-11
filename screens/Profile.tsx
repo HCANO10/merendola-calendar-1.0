@@ -44,7 +44,6 @@ const Profile: React.FC = () => {
           display_name: name,
           birthday: birthday,
           notification_email: notificationEmail,
-          "notificationEmail": notificationEmail,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', state.user.id);

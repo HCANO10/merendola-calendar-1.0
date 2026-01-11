@@ -29,11 +29,14 @@ const TeamSetup: React.FC = () => {
             name: teamName.trim(),
             created_by: state.user.id
           }
-        ])
-        .select()
-        .single();
+        ]);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('Ya existe un equipo con ese nombre o se ha producido un conflicto. Prueba con otro nombre.');
+        }
+        throw error;
+      }
 
       setToast("¡Equipo creado con éxito!");
       setTimeout(() => {
@@ -41,7 +44,7 @@ const TeamSetup: React.FC = () => {
       }, 500);
     } catch (err: any) {
       console.error('Error creating team:', err);
-      alert('Error al crear el equipo: ' + err.message);
+      alert(err.message || 'Error al crear el equipo');
       setError(err.message);
       setLoading(false);
     }

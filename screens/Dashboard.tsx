@@ -41,15 +41,19 @@ const Dashboard: React.FC = () => {
   const [location, setLocation] = useState(''); // NEW: Location field
   const [toast, setToast] = useState<string | null>(null);
 
-  // Safety Guard: If team is not loaded, show loading state.
-  if (!state.team) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-950 h-full">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Cargando equipo...</p>
-      </div>
-    );
-  }
+  if (loading && state.team) return <div className="p-10 h-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 font-bold text-slate-500 uppercase tracking-widest text-xs">Cargando eventos...</div>;
+
+  if (!state.team) return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-950 h-full text-center">
+      <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter mb-4">No tienes equipo seleccionado</h2>
+      <button
+        onClick={() => window.location.href = '/team-setup'}
+        className="px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-transform"
+      >
+        Ir a Equipos
+      </button>
+    </div>
+  );
 
 
   const fetchDashboardData = async () => {

@@ -305,6 +305,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               };
             });
           }
+        } else {
+          // AUTO-CURACIÓN: The team in active_team_id doesn't exist or user is not a member.
+          console.warn(`[Store] [Auto-Curación] Active team ${activeTeamId} not found in memberships. Resetting.`);
+          await supabase
+            .from('profiles')
+            .update({ active_team_id: null })
+            .eq('user_id', userId);
+
+          user.activeTeamId = undefined; // Update local user object
         }
       }
 
