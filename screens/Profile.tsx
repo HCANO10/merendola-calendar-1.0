@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import MainLayout from '../layouts/MainLayout';
+import MainLayout from '../src/layouts/MainLayout';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
