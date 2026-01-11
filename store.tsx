@@ -57,9 +57,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       teamMembers: MOCK_TEAM_MEMBERS,
       notifications: [],
       invites: [],
-      syncError: null
+      syncError: null,
+      loading: true
     };
-    return { ...initialState, teamMembers: MOCK_TEAM_MEMBERS, syncError: null };
+    return { ...initialState, teamMembers: MOCK_TEAM_MEMBERS, syncError: null, loading: true };
   });
 
   const [loadError, setLoadError] = useState(false);
@@ -94,7 +95,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setLoadError(false);
     setDbNotInitialized(false);
-    setState(prev => ({ ...prev, syncError: null }));
+    setState(prev => ({ ...prev, syncError: null, loading: true }));
 
     try {
       // 1. Initial State from Session
@@ -365,6 +366,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearTimeout(timeoutId);
       setAuthLoading(false);
       inFlightRef.current = false;
+      setState(prev => ({ ...prev, loading: false }));
     }
   }, [session, state.user?.id, loadError, dbNotInitialized]);
 
@@ -411,7 +413,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           teamMembers: [],
           notifications: [],
           invites: [],
-          syncError: null
+          syncError: null,
+          loading: false
         });
       }
     });

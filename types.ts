@@ -83,4 +83,5 @@ export interface AppState {
   notifications: Notification[];
   invites: Invite[];
   syncError: SyncError | null;
+  loading: boolean;
 }
