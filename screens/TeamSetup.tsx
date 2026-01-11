@@ -52,7 +52,7 @@ const TeamSetup: React.FC = () => {
         await joinTeamByHandle(trimmedInput);
       }
       showToast('¡Te has unido al equipo!', 'success');
-      setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
+      setTimeout(() => window.location.reload(), 1000);
     } catch (e: any) {
       console.error(e);
       showToast(e.message || 'Error desconocido al unirse');
@@ -86,7 +86,7 @@ const TeamSetup: React.FC = () => {
         </div>
 
         <button
-          onClick={() => navigate('/dashboard', { replace: true })}
+          onClick={() => window.location.reload()}
           className="w-full max-w-md h-16 bg-primary text-white text-lg font-bold rounded-2xl shadow-xl shadow-primary/30 hover:bg-primary/90 transition-all flex items-center justify-center gap-3"
         >
           Ir al Dashboard
