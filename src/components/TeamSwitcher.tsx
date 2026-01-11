@@ -77,7 +77,7 @@ const TeamSwitcher: React.FC = () => {
                                         {team.name}
                                     </p>
                                     <p className="text-[10px] text-slate-400 font-medium truncate uppercase tracking-tighter">
-                                        {team.inviteCode}
+                                        {team.join_code}
                                     </p>
                                 </div>
                                 {team.id === state.team?.id && (

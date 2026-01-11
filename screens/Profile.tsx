@@ -41,20 +41,28 @@ const Profile: React.FC = () => {
         .from('profiles')
         .update({
           full_name: name,
-          display_name: name, // Mantener para compatibilidad
-          birthday,
+          display_name: name,
+          birthday: birthday,
           notification_email: notificationEmail,
-          "notificationEmail": notificationEmail, // Safeguard for different schema versions
-          updated_at: new Date()
+          "notificationEmail": notificationEmail,
+          updated_at: new Date().toISOString()
         })
         .eq('user_id', state.user.id);
 
       if (error) throw error;
 
-      // FIX ANTIGRAVITY: Forzar recarga para actualizar el estado global crítico
-      window.location.reload();
+      updateUser({
+        name,
+        birthday,
+        notificationEmail
+      });
+
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      setLoading(false);
     } catch (error) {
       console.error('Error saving profile:', error);
+      setErrorStatus("Error al guardar el perfil.");
       setLoading(false);
     }
   };

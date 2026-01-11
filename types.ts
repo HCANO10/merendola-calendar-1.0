@@ -15,8 +15,9 @@ export interface User {
 export interface Team {
   id: string;
   name: string;
-  inviteCode: string;
+  join_code: string;
   createdAt: string;
+  role?: UserRole;
 }
 
 export interface Comment {
@@ -58,6 +59,7 @@ export interface Snack {
   date: string;
   time: string;
   description?: string;
+  location?: string;
   userName?: string;
   confirmedUserIds: string[]; // Legacy - We will prioritize invites now
   comments: Comment[];

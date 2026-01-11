@@ -386,3 +386,25 @@ create trigger on_merendola_notification
   after insert on merendolas
   for each row execute procedure handle_new_merendola_notification();
 
+
+-- MIGRATION: Rename merendolas to events and add location
+alter table if exists merendolas rename to events;
+alter table if exists events add column if not exists location text;
+-- Update attendees foreign key if needed (Postgres usually handles this if done correctly via RLS but let's be safe)
+-- The foreign key merendola_id in attendees already points to the table formerly known as merendolas.
+
+-- Update triggers if renamed
+drop trigger if exists on_merendola_created on events;
+create trigger on_event_created
+  after insert on events
+  for each row execute procedure handle_new_merendola();
+
+drop trigger if exists on_merendola_notification on events;
+create trigger on_event_notification
+  after insert on events
+  for each row execute procedure handle_new_merendola_notification();
+
+
+-- Rename user_id to created_by in events for consistency with user snippet
+alter table if exists events rename column user_id to created_by;
+

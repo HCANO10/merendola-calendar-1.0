@@ -9,6 +9,7 @@ import { useStore } from '../store';
 import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';
 import NotificationBell from '../src/components/NotificationBell';
+import { sendEventInvitation } from '../src/utils/emailService';
 
 const locales = {
   'es': es,
@@ -37,18 +38,19 @@ const Dashboard: React.FC = () => {
   const [title, setTitle] = useState('');
   const [creating, setCreating] = useState(false);
   const [description, setDescription] = useState('');
+  const [location, setLocation] = useState(''); // NEW: Location field
   const [toast, setToast] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
     if (!state.team?.id) return;
     setLoading(true);
     try {
-      // 1. Fetch Merendolas
+      // 1. Fetch Events
       const { data: merendolas, error: mErr } = await supabase
-        .from('merendolas')
+        .from('events')
         .select(`
                     *,
-                    profiles:user_id (display_name),
+                    profiles:created_by (display_name),
                     attendees (*)
                 `)
         .eq('team_id', state.team.id);
@@ -70,7 +72,7 @@ const Dashboard: React.FC = () => {
             type: 'merendola',
             description: m.description,
             creator: m.profiles?.display_name,
-            creatorId: m.user_id,
+            creatorId: m.created_by,
             attendees: m.attendees || []
           }
         };
@@ -120,33 +122,51 @@ const Dashboard: React.FC = () => {
       const timeStr = format(selectedSlot.start, 'HH:mm:ss');
 
       const { error } = await supabase
-        .from('merendolas')
+        .from('events')
         .insert({
           team_id: state.team.id,
           created_by: state.user.id,
-          user_id: state.user.id,
           title: title,
           start_time: selectedSlot.start.toISOString(),
           end_time: selectedSlot.end.toISOString(),
           date: format(selectedSlot.start, 'yyyy-MM-dd'),
           time: format(selectedSlot.start, 'HH:mm:ss'),
-          description: description
+          description: description,
+          location: location
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error in Supabase insert:', error);
+        alert('Error al guardar el evento: ' + error.message);
+        return;
+      }
 
-      // TODO: Call Edge Function to send email to team members
-      setToast("Evento creado. Se ha notificado a tu equipo por email.");
+      // Success flow
+      const eventDataForEmail = {
+        title: title,
+        start_time: selectedSlot.start.toISOString(),
+        location: location
+      };
+
+      const recipientEmails = state.teamMembers
+        .map(m => m.notificationEmail || m.email)
+        .filter(email => !!email);
+
+      const result = await sendEventInvitation(
+        eventDataForEmail,
+        state.team?.name || 'Equipo',
+        state.user?.name || 'Un compañero',
+        recipientEmails
+      );
+
+      setToast(`📧 Invitaciones enviadas a ${result.count} miembros del equipo.`);
       setTimeout(() => setToast(null), 5000);
 
       setShowCreateModal(false);
       setTitle('');
       setDescription('');
+      setLocation('');
 
-      // Simulación de envío de email
-      console.log(`[Email] Enviando notificación a equipo ${state.team.name}...`);
-
-      // En lugar de recargar, simplemente refrescamos los datos locales
       fetchDashboardData();
     } catch (error) {
       console.error('Error creating event:', error);
@@ -225,11 +245,11 @@ const Dashboard: React.FC = () => {
           <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
             <div className="py-2">
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
-              <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.inviteCode}</p>
+              <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.join_code}</p>
             </div>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(state.team?.inviteCode || '');
+                navigator.clipboard.writeText(state.team?.join_code || '');
                 setToast("Código copiado al portapapeles");
                 setTimeout(() => setToast(null), 3000);
               }}
@@ -301,6 +321,13 @@ const Dashboard: React.FC = () => {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
+                />
+                <label className="block text-xs font-black uppercase text-slate-400 mb-2">Ubicación</label>
+                <input
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl h-14 px-6 font-bold text-lg outline-none ring-2 ring-transparent focus:ring-primary/20 transition-all mb-4"
+                  placeholder="Ej: Sala 302, Cocina..."
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
                 />
                 <label className="block text-xs font-black uppercase text-slate-400 mb-2">Descripción (Opcional)</label>
                 <textarea

@@ -23,6 +23,7 @@ interface StoreContextType {
   joinTeam: (code: string) => Promise<void>;
   joinTeamByHandle: (handle: string) => Promise<void>;
   switchTeam: (teamId: string) => Promise<void>;
+  deleteTeam: (teamId: string) => Promise<void>;
   setTeam: (team: Team) => void;
   addSnack: (snack: Omit<Snack, 'id' | 'userId' | 'teamId' | 'confirmedUserIds' | 'comments'>) => Promise<void>;
   editSnack: (id: string, updates: Partial<Snack>) => void;
@@ -220,7 +221,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.log('[Store] [fetchUserData] step=all_teams');
       const { data: allTeamsData, error: allTeamsErr } = await supabase
         .from('memberships')
-        .select('teams (*)')
+        .select('role, teams (*)')
         .eq('user_id', userId);
 
       if (allTeamsErr) {
@@ -229,8 +230,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         teams = allTeamsData.map((m: any) => ({
           id: m.teams.id,
           name: m.teams.name,
-          inviteCode: m.teams.invite_code,
-          createdAt: m.teams.created_at
+          join_code: m.teams.invite_code,
+          createdAt: m.teams.created_at,
+          role: m.role
         }));
       }
 
@@ -263,13 +265,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
           }
 
-          // 8. Get Merendolas
-          console.log('[Store] [fetchUserData] step=merendolas');
+          // 8. Get Events
+          console.log('[Store] [fetchUserData] step=events');
           const { data: snacksData, error: snacksError } = await supabase
-            .from('merendolas')
+            .from('events')
             .select(`
                 *,
-                profiles(display_name),
+                profiles:created_by(display_name),
                 attendees(user_id, status)
               `)
             .eq('team_id', activeTeamId);
@@ -289,13 +291,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
               return {
                 id: s.id,
-                userId: s.user_id,
+                userId: s.created_by,
                 teamId: s.team_id,
                 eventTitle: s.title,
                 contribution: s.contribution,
                 date: s.date,
                 time: s.time,
                 description: s.description,
+                location: s.location,
                 userName: s.profiles?.display_name,
                 confirmedUserIds: [],
                 comments: []
@@ -487,6 +490,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const deleteTeam = async (teamId: string) => {
+    if (!state.user) return;
+    try {
+      const { error } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', teamId);
+
+      if (error) throw error;
+      await fetchUserData(state.user.id);
+    } catch (e) {
+      console.error('[Store] deleteTeam error:', e);
+      throw e;
+    }
+  };
+
   const joinTeamByHandle = async (handle: string) => {
     if (!state.user) return;
     const handleTrimmed = handle.trim();
@@ -607,7 +626,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <StoreContext.Provider value={{
-      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, joinTeamByHandle, switchTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
+      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, joinTeamByHandle, switchTeam, deleteTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
     }}>
       {children}
     </StoreContext.Provider>
