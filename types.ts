@@ -50,11 +50,11 @@ export interface Notification {
   createdAt: string;
 }
 
-export interface Snack {
+export interface AppEvent {
   id: string;
   userId: string;
-  teamId: string;
-  eventTitle: string;
+  team_id: string;
+  title: string;
   contribution: string;
   date: string;
   time: string;
@@ -63,6 +63,8 @@ export interface Snack {
   userName?: string;
   confirmedUserIds: string[]; // Legacy - We will prioritize invites now
   comments: Comment[];
+  start_time: string;
+  end_time: string;
 }
 
 
@@ -76,7 +78,7 @@ export interface AppState {
   user: User | null;
   team: Team | null;
   teams: Team[];
-  snacks: Snack[];
+  events: AppEvent[];
   teamMembers: User[];
   notifications: Notification[];
   invites: Invite[];
