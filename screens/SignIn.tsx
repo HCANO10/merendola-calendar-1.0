@@ -130,10 +130,13 @@ const SignIn: React.FC = () => {
           return;
         }
 
-        // Success: the navigate logic will happen via App.tsx auth state detection
-        // but we can help it if needed:
+        // Success: Clear any previous error and navigate EXPLICITLY
         showToast('¡Sesión iniciada!', 'success');
-        navigate('/dashboard');
+
+        // Final check to avoid rebounce: if we have session, we must go to dashboard
+        if (data.session) {
+          navigate('/dashboard', { replace: true });
+        }
       }
     } catch (err: any) {
       console.error('Login error:', err);

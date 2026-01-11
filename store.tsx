@@ -200,24 +200,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Handle Supabase Session
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      }
-    });
+    console.log('--- AuthProvider Init ---');
+    setAuthLoading(true);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Auth getSession success:', !!session);
       setSession(session);
       if (session?.user) {
         fetchUserData(session.user.id);
       } else {
+        setAuthLoading(false);
+      }
+    });
+
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth Event:', event, 'Session:', !!session);
+      setSession(session);
+
+      if (session?.user) {
+        fetchUserData(session.user.id);
+      } else {
+        // Clear state on logout or if no user
+        setAuthLoading(false);
         setState({
           user: null,
           team: null,
           snacks: [],
-          teamMembers: [], // Clear on logout
+          teamMembers: [],
           notifications: [],
           invites: []
         });
@@ -225,7 +236,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchUserData]);
 
   // Persist State (Data)
   useEffect(() => {
