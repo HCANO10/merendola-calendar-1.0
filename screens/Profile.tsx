@@ -27,22 +27,28 @@ const Profile: React.FC = () => {
     return name.trim().length > 0 && birthday !== '' && isEmailValid;
   }, [name, birthday, isEmailValid]);
 
-  const handleSave = () => {
-    if (!isFormValid) return;
+  const handleSave = async () => {
+    if (!isFormValid || !state.user) return;
     setLoading(true);
 
-    updateUser({
-      name,
-      birthday,
-      email: notificationEmail
-    });
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          display_name: name,
+          birthday,
+          notification_email: notificationEmail
+        })
+        .eq('user_id', state.user.id);
 
-    setLoading(false);
-    setShowToast(true);
-    setTimeout(() => {
-      setShowToast(false);
-      navigate('/dashboard');
-    }, 1500);
+      if (error) throw error;
+
+      // FIX ANTIGRAVITY: Forzar recarga para actualizar el estado global crítico
+      window.location.reload();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      setLoading(false);
+    }
   };
 
   const handleLogout = async () => {
