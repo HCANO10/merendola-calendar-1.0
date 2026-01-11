@@ -387,13 +387,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const createTeam = async (name: string) => {
     if (!state.user) throw new Error('Usuario no autenticado');
+    const teamNameTrimmed = name.trim();
+    if (!teamNameTrimmed) throw new Error('Escribe un nombre de equipo');
+
+    console.log("[Store] create_team payload", { team_name: teamNameTrimmed });
+
     try {
-      const { data, error } = await supabase.rpc('create_team', { team_name: name });
+      const { data, error } = await supabase.rpc('create_team', { team_name: teamNameTrimmed });
 
       if (error) {
         const err = error as any;
-        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
-          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
+        const isMissingRpc = err.code === 'PGRST104' ||
+          err.code === '42883' ||
+          err.message?.includes('does not exist') ||
+          err.message?.includes('Could not find the function') ||
+          err.message?.includes('schema cache') ||
+          err.status === 404;
+
+        if (isMissingRpc) {
+          throw new Error('CONFIG_ERROR: La función create_team no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
         }
         throw error;
       }
@@ -412,13 +424,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const joinTeam = async (code: string) => {
     if (!state.user) return;
+    const codeTrimmed = code.trim();
+    if (!codeTrimmed) throw new Error('Escribe un código de invitación');
+
     try {
-      const { data: teamId, error } = await supabase.rpc('join_team', { invite_code: code });
+      const { data: teamId, error } = await supabase.rpc('join_team', { invite_code: codeTrimmed });
 
       if (error) {
         const err = error as any;
-        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
-          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
+        const isMissingRpc = err.code === 'PGRST104' ||
+          err.code === '42883' ||
+          err.message?.includes('does not exist') ||
+          err.message?.includes('Could not find the function') ||
+          err.message?.includes('schema cache') ||
+          err.status === 404;
+
+        if (isMissingRpc) {
+          throw new Error('CONFIG_ERROR: La función join_team no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
         }
         throw error;
       }
@@ -435,13 +457,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const joinTeamByHandle = async (handle: string) => {
     if (!state.user) return;
+    const handleTrimmed = handle.trim();
+    if (!handleTrimmed) throw new Error('Escribe el nombre del equipo');
+
     try {
-      const { data: teamId, error } = await supabase.rpc('join_team_by_handle', { team_handle: handle });
+      const { data: teamId, error } = await supabase.rpc('join_team_by_handle', { team_handle: handleTrimmed });
 
       if (error) {
         const err = error as any;
-        if (err.code === 'PGRST104' || err.message?.includes('does not exist') || err.status === 404) {
-          throw new Error('CONFIG_ERROR: Faltan funciones RPC en Supabase. Ejecuta SQL y NOTIFY pgrst.');
+        const isMissingRpc = err.code === 'PGRST104' ||
+          err.code === '42883' ||
+          err.message?.includes('does not exist') ||
+          err.message?.includes('Could not find the function') ||
+          err.message?.includes('schema cache') ||
+          err.status === 404;
+
+        if (isMissingRpc) {
+          throw new Error('CONFIG_ERROR: La función join_team_by_handle no existe o el parámetro no coincide. Revisa Supabase SQL y ejecuta NOTIFY pgrst, \'reload schema\'.');
         }
         throw error;
       }

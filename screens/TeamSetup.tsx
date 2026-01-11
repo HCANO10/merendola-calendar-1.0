@@ -20,44 +20,42 @@ const TeamSetup: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    if (!teamName.trim()) return;
+    const trimmedName = teamName.trim();
+    if (!trimmedName) {
+      showToast('Escribe un nombre de equipo');
+      return;
+    }
     setLoading(true);
     try {
-      const data = await createTeam(teamName);
+      const data = await createTeam(trimmedName);
       setSuccessData(data);
       showToast('¡Equipo creado con éxito!', 'success');
     } catch (e: any) {
       console.error(e);
-      if (e.message?.includes('CONFIG_ERROR')) {
-        showToast(e.message);
-      } else {
-        showToast('Error al crear equipo: ' + (e.message || 'Error desconocido'));
-      }
+      showToast(e.message || 'Error desconocido al crear equipo');
     } finally {
       setLoading(false);
     }
   };
 
   const handleJoin = async () => {
-    if (!inputValue.trim()) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput) {
+      showToast(joinMode === 'code' ? 'Escribe un código de invitación' : 'Escribe el nombre del equipo');
+      return;
+    }
     setLoading(true);
     try {
       if (joinMode === 'code') {
-        await joinTeam(inputValue);
+        await joinTeam(trimmedInput);
       } else {
-        await joinTeamByHandle(inputValue);
+        await joinTeamByHandle(trimmedInput);
       }
       showToast('¡Te has unido al equipo!', 'success');
       setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
     } catch (e: any) {
       console.error(e);
-      if (e.message?.includes('CONFIG_ERROR')) {
-        showToast(e.message);
-      } else if (e.message?.includes('inválido') || e.message?.includes('invalid') || e.message?.includes('existe')) {
-        showToast('Código o nombre de equipo inválido.');
-      } else {
-        showToast('Error al unirse: ' + (e.message || 'Error desconocido'));
-      }
+      showToast(e.message || 'Error desconocido al unirse');
     } finally {
       setLoading(false);
     }
