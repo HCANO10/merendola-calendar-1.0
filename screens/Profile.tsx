@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
+import { supabase } from '../supabaseClient';
 
 /**
  * Profile component to manage user information like name and birthday.
@@ -45,8 +46,16 @@ const Profile: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      // 1. Intentar cerrar sesión en Supabase
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error);
+    } finally {
+      // 2. FUERZA BRUTA: Limpiar almacenamiento local y recargar navegador
+      localStorage.clear(); // Opcional, por seguridad
+      window.location.href = '/'; // Usar href, NO navigate(), para purgar el estado de memoria
+    }
   };
 
   return (
