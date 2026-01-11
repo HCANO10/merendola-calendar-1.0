@@ -60,21 +60,29 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [loadError, setLoadError] = useState(false);
   const [dbNotInitialized, setDbNotInitialized] = useState(false);
   const [dbErrorMessage, setDbErrorMessage] = useState<string | null>(null);
-  const fetchInFlight = React.useRef<string | null>(null);
+
+  // Anti-loop Guards (Step 6)
+  const inFlightRef = React.useRef(false);
+  const lastUserIdRef = React.useRef<string | null>(null);
 
   const fetchUserData = useCallback(async (userId: string) => {
-    // 0. Loop Guard: If already fetching THIS user, skip
-    if (fetchInFlight.current === userId) return;
-    fetchInFlight.current = userId;
+    // 0. Loop Guard: If already fetching, or already loaded this user, skip (Step 7)
+    if (inFlightRef.current) return;
+    if (lastUserIdRef.current === userId && state.user?.id === userId && !loadError && !dbNotInitialized) {
+      return;
+    }
 
-    console.log('--- fetchUserData Start ---', userId);
+    inFlightRef.current = true;
+    lastUserIdRef.current = userId;
+
+    console.log(`[Store] fetchUserData Start: ${userId} at ${new Date().toISOString()}`);
 
     // Safety timeout to avoid infinite loading
     const timeoutId = setTimeout(() => {
       setAuthLoading(false);
       setLoadError(true);
-      fetchInFlight.current = null;
-      console.warn('fetchUserData timed out after 10s');
+      inFlightRef.current = false;
+      console.warn('[Store] fetchUserData timed out after 10s');
     }, 10000);
 
     setLoadError(false);
@@ -258,41 +266,54 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         invites
       }));
 
+      console.log(`[Store] fetchUserData End Success: ${userId}`);
     } catch (error) {
-      console.error('Fatal error in fetchUserData:', error);
+      console.error('[Store] Fatal error in fetchUserData:', error);
       setLoadError(true);
     } finally {
       clearTimeout(timeoutId);
       setAuthLoading(false);
-      fetchInFlight.current = null;
+      inFlightRef.current = false;
     }
-  }, [session]);
+  }, [session, state.user?.id, loadError, dbNotInitialized]);
 
-  // Handle Supabase Session
+  // Handle Supabase Session (Step 4)
   useEffect(() => {
-    console.log('--- AuthProvider Init ---');
-    setAuthLoading(true);
+    console.log('[Store] AuthProvider Init', new Date().toISOString());
+    let mounted = true;
 
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Auth getSession success:', !!session);
-      setSession(session);
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      } else {
+    const initAuth = async () => {
+      setAuthLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        console.log('[Store] Initial Session:', session?.user?.id || 'none');
+        setSession(session);
+
+        if (session?.user) {
+          fetchUserData(session.user.id);
+        } else {
+          setAuthLoading(false);
+        }
+      } catch (err) {
+        console.error('[Store] Session init error:', err);
         setAuthLoading(false);
       }
-    });
+    };
+
+    initAuth();
 
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth Event:', event, 'Session:', !!session);
+      console.log('[Store] Auth Event:', event, 'User:', session?.user?.id || 'none');
+      if (!mounted) return;
+
       setSession(session);
 
       if (session?.user) {
         fetchUserData(session.user.id);
       } else {
-        // Clear state on logout or if no user
         setAuthLoading(false);
         setState({
           user: null,
@@ -305,7 +326,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [fetchUserData]);
 
   // Persist State (Data)
@@ -354,11 +378,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const { data: teamId, error } = await supabase.rpc('create_team', { team_name: name });
       if (error) throw error;
       if (teamId) {
-        // If we had a fetchUserData exposed in context, we'd call it here.
-        // Since it's internal to the effect, we can trigger a reload or rely on real-time if enabled.
-        // For now, reload window is crude but guarantees state sync with new RLS scope.
-        // Or better: Assume the user profile active_team_id updated, so we need to refresh session/data.
-        window.location.reload();
+        // Trigger refetch by clearing lastUserIdRef
+        lastUserIdRef.current = null;
+        if (session?.user) fetchUserData(session.user.id);
       }
     } catch (e) {
       console.error(e);
@@ -372,7 +394,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const { data: teamId, error } = await supabase.rpc('join_team', { invite_code_input: code });
       if (error) throw error;
       if (teamId) {
-        window.location.reload();
+        lastUserIdRef.current = null;
+        if (session?.user) fetchUserData(session.user.id);
       }
     } catch (e) {
       console.error(e);
@@ -398,10 +421,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       throw error;
     }
 
-    // Trigger (on_merendola_created) handles attendees creation automatically
-    // We rely on re-fetching or real-time to see updates. 
-    // For this step, a window reload or prop callback is simplest if fetchUserData isn't exposed.
-    window.location.reload();
+    // Trigger refetch
+    lastUserIdRef.current = null;
+    if (session?.user) fetchUserData(session.user.id);
   };
 
   const editSnack = useCallback((id: string, updates: Partial<Snack>) => {

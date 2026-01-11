@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { StoreProvider, useStore } from './store';
 import { supabase } from './supabaseClient';
 import SignIn from './screens/SignIn';
@@ -19,9 +19,8 @@ const AppRoutes: React.FC = () => {
       window.location.hash.includes('access_token=');
 
     if (hasRecoveryHash && !location.pathname.includes('reset-password')) {
-      const currentHash = window.location.hash;
-      console.log('Recovery hash detected, redirecting to /reset-password');
-      window.location.hash = `#/reset-password${currentHash.startsWith('#') ? currentHash.substring(1) : currentHash}`;
+      console.log('[App] Recovery hash detected, moving to /reset-password');
+      navigate('/reset-password' + window.location.hash, { replace: true });
       return;
     }
 
@@ -200,9 +199,9 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <StoreProvider>
-        <HashRouter>
+        <BrowserRouter>
           <AppRoutes />
-        </HashRouter>
+        </BrowserRouter>
       </StoreProvider>
     </ErrorBoundary>
   );

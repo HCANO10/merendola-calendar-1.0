@@ -71,8 +71,6 @@ const SignIn: React.FC = () => {
       setConfirmPassword('');
       await signOut(); // Ensure session is clean
 
-      // Clean URL hash and redirect to clean login
-      window.location.hash = '';
       navigate('/', { replace: true });
     } catch (err: any) {
       console.error('Update password error:', err);
@@ -84,7 +82,6 @@ const SignIn: React.FC = () => {
 
   const closeResetModal = () => {
     setShowResetModal(false);
-    window.location.hash = '';
     navigate('/', { replace: true });
   };
 
