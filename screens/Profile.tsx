@@ -40,10 +40,12 @@ const Profile: React.FC = () => {
       const { error } = await supabase
         .from('profiles')
         .update({
-          display_name: name,
+          full_name: name,
+          display_name: name, // Mantener para compatibilidad
           birthday,
           notification_email: notificationEmail,
-          "notificationEmail": notificationEmail // Safeguard for different schema versions
+          "notificationEmail": notificationEmail, // Safeguard for different schema versions
+          updated_at: new Date()
         })
         .eq('user_id', state.user.id);
 

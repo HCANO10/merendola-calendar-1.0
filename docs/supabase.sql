@@ -344,3 +344,45 @@ create trigger on_merendola_created
 NOTIFY pgrst, 'reload schema';
 
 -- END
+
+-- 6. NOTIFICATIONS
+create table if not exists notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(user_id) on delete cascade not null,
+  type text not null,
+  payload jsonb not null,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+alter table notifications enable row level security;
+create policy "View own notifications" on notifications for select using (auth.uid() = user_id);
+create policy "Update own notifications" on notifications for update using (auth.uid() = user_id);
+
+-- Trigger for notifications on new merendola
+create or replace function handle_new_merendola_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (user_id, type, payload)
+  select m.user_id, 'MERENDOLA_INVITE', jsonb_build_object(
+    'merendolaId', new.id,
+    'title', new.title,
+    'date', new.date,
+    'creatorName', (select display_name from profiles where user_id = new.created_by)
+  )
+  from memberships m
+  where m.team_id = new.team_id
+  and m.user_id != new.created_by;
+  
+  return new;
+end;
+$$;
+
+drop trigger if exists on_merendola_notification on merendolas;
+create trigger on_merendola_notification
+  after insert on merendolas
+  for each row execute procedure handle_new_merendola_notification();
+

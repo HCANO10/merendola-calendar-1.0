@@ -7,6 +7,8 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { supabase } from '../supabaseClient';
 import { useStore } from '../store';
 import { RSVPStatus } from '../types';
+import TeamSwitcher from '../src/components/TeamSwitcher';
+import NotificationBell from '../src/components/NotificationBell';
 
 const locales = {
   'es': es,
@@ -140,8 +142,12 @@ const Dashboard: React.FC = () => {
       setShowCreateModal(false);
       setTitle('');
       setDescription('');
-      // Recarga vital para sincronizar estado global tras trigger
-      window.location.reload();
+
+      // Simulación de envío de email
+      console.log(`[Email] Enviando notificación a equipo ${state.team.name}...`);
+
+      // En lugar de recargar, simplemente refrescamos los datos locales
+      fetchDashboardData();
     } catch (error) {
       console.error('Error creating event:', error);
     } finally {
@@ -204,35 +210,38 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Panel de Información del Equipo */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 mb-8 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 mb-8 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
-          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-4xl">groups</span>
-          </div>
+          <TeamSwitcher />
+          <div className="h-10 w-px bg-slate-100 dark:bg-slate-800 hidden lg:block mx-2"></div>
           <div>
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Panel del Equipo</h2>
             <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{state.team?.name}</p>
-            <p className="text-xs text-slate-500 mt-2 font-medium">Gestiona y organiza las meriendas de tu comunidad en un solo lugar.</p>
+            <p className="text-xs text-slate-500 mt-2 font-medium">Gestiona y organiza las meriendas de tu comunidad.</p>
           </div>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
-          <div className="py-2">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
-            <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.inviteCode}</p>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
+            <div className="py-2">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
+              <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.inviteCode}</p>
+            </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(state.team?.inviteCode || '');
+                setToast("Código copiado al portapapeles");
+                setTimeout(() => setToast(null), 3000);
+              }}
+              className="h-14 px-4 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm hover:bg-primary hover:text-white transition-all group gap-2"
+              title="Copiar código"
+            >
+              <span className="material-symbols-outlined transition-transform group-active:scale-90 text-lg">content_copy</span>
+              <span className="text-xs font-black uppercase">Copiar</span>
+            </button>
           </div>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(state.team?.inviteCode || '');
-              setToast("Código copiado al portapapeles");
-              setTimeout(() => setToast(null), 3000);
-            }}
-            className="h-14 px-4 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm hover:bg-primary hover:text-white transition-all group gap-2"
-            title="Copiar código"
-          >
-            <span className="material-symbols-outlined transition-transform group-active:scale-90">content_copy</span>
-            <span className="text-xs font-black uppercase">Copiar</span>
-          </button>
+
+          <NotificationBell />
         </div>
       </div>
 

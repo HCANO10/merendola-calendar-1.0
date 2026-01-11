@@ -22,6 +22,7 @@ interface StoreContextType {
   createTeam: (name: string) => Promise<{ id: string; handle: string; invite_code: string }>;
   joinTeam: (code: string) => Promise<void>;
   joinTeamByHandle: (handle: string) => Promise<void>;
+  switchTeam: (teamId: string) => Promise<void>;
   setTeam: (team: Team) => void;
   addSnack: (snack: Omit<Snack, 'id' | 'userId' | 'teamId' | 'confirmedUserIds' | 'comments'>) => Promise<void>;
   editSnack: (id: string, updates: Partial<Snack>) => void;
@@ -50,6 +51,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const initialState: AppState = saved ? JSON.parse(saved) : {
       user: null,
       team: null,
+      teams: [],
       snacks: [],
       teamMembers: MOCK_TEAM_MEMBERS,
       notifications: [],
@@ -185,53 +187,62 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       let activeTeamId = profile?.active_team_id || null;
 
-      // 4. Fallback Team Selection
-      if (!activeTeamId) {
-        console.log('[Store] [fetchUserData] step=membership_fallback');
-        const { data: mData, error: mErr } = await supabase
-          .from('memberships')
-          .select('team_id')
-          .eq('user_id', userId)
-          .limit(1);
-
-        if (mErr) {
-          console.error('Error fetching memberships fallback:', mErr);
-        } else if (mData && mData.length > 0) {
-          activeTeamId = mData[0].team_id;
-          console.log('Found team membership, setting as active:', activeTeamId);
-          await supabase.from('profiles').update({ active_team_id: activeTeamId }).eq('user_id', userId);
-        }
-      }
-
       let team = null;
+      let teams: Team[] = [];
       let teamMembers: User[] = [];
       let snacks: Snack[] = [];
       let invites: Invite[] = [];
+      let notifications: Notification[] = [];
 
-      // 5. Get Active Team Data
+      // 5. Get Notifications
+      console.log('[Store] [fetchUserData] step=notifications');
+      const { data: notifData, error: notifError } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (notifError) {
+        console.error('Error fetching notifications:', notifError);
+      } else if (notifData) {
+        notifications = notifData.map((n: any) => ({
+          id: n.id,
+          userId: n.user_id,
+          type: n.type,
+          payload: n.payload,
+          readAt: n.read_at,
+          createdAt: n.created_at
+        }));
+      }
+
+      // 6. Get ALL User Teams (Memberships)
+      console.log('[Store] [fetchUserData] step=all_teams');
+      const { data: allTeamsData, error: allTeamsErr } = await supabase
+        .from('memberships')
+        .select('teams (*)')
+        .eq('user_id', userId);
+
+      if (allTeamsErr) {
+        console.error('Error fetching all teams:', allTeamsErr);
+      } else if (allTeamsData) {
+        teams = allTeamsData.map((m: any) => ({
+          id: m.teams.id,
+          name: m.teams.name,
+          inviteCode: m.teams.invite_code,
+          createdAt: m.teams.created_at
+        }));
+      }
+
+      // 6. Get Active Team Data
       if (activeTeamId) {
-        console.log('[Store] [fetchUserData] step=team');
-        const { data: teamData, error: teamError } = await supabase
-          .from('teams')
-          .select('*')
-          .eq('id', activeTeamId)
-          .single();
+        console.log(`[Store] [fetchUserData] step=active_team id=${activeTeamId}`);
+        const activeTeam = teams.find(t => t.id === activeTeamId);
 
-        if (teamError) {
-          console.error('Error fetching team:', teamError);
-          setState(prev => ({
-            ...prev,
-            syncError: { step: 'team', code: teamError.code, message: teamError.message }
-          }));
-        } else if (teamData) {
-          team = {
-            id: teamData.id,
-            name: teamData.name,
-            inviteCode: teamData.invite_code,
-            createdAt: teamData.created_at
-          };
+        if (activeTeam) {
+          team = activeTeam;
 
-          // 6. Get Members
+          // 7. Get Members
           console.log('[Store] [fetchUserData] step=members');
           const { data: membersData, error: membersError } = await supabase
             .from('memberships')
@@ -252,15 +263,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
           }
 
-          // 7. Get Merendolas
+          // 8. Get Merendolas
           console.log('[Store] [fetchUserData] step=merendolas');
           const { data: snacksData, error: snacksError } = await supabase
             .from('merendolas')
             .select(`
-              *,
-              profiles(display_name),
-              attendees(user_id, status)
-            `)
+                *,
+                profiles(display_name),
+                attendees(user_id, status)
+              `)
             .eq('team_id', activeTeamId);
 
           if (snacksError) {
@@ -298,9 +309,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...prev,
         user,
         team,
+        teams,
         teamMembers,
         snacks,
         invites,
+        notifications,
         syncError: null
       }));
 
@@ -357,6 +370,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setState({
           user: null,
           team: null,
+          teams: [],
           snacks: [],
           teamMembers: [],
           notifications: [],
@@ -451,6 +465,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch (e) {
       console.error('[Store] joinTeam error:', e);
+      throw e;
+    }
+  };
+
+  const switchTeam = async (teamId: string) => {
+    if (!state.user) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ active_team_id: teamId })
+        .eq('user_id', state.user.id);
+
+      if (error) throw error;
+
+      // Recargar datos para el nuevo equipo
+      await fetchUserData(state.user.id);
+    } catch (e) {
+      console.error('[Store] switchTeam error:', e);
       throw e;
     }
   };
@@ -575,7 +607,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <StoreContext.Provider value={{
-      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, joinTeamByHandle, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
+      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, joinTeamByHandle, switchTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
     }}>
       {children}
     </StoreContext.Provider>

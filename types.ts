@@ -73,6 +73,7 @@ export interface SyncError {
 export interface AppState {
   user: User | null;
   team: Team | null;
+  teams: Team[];
   snacks: Snack[];
   teamMembers: User[];
   notifications: Notification[];
