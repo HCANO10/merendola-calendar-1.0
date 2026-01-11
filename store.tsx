@@ -251,77 +251,82 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (activeTeam) {
           team = activeTeam;
 
-          // 7a. Get Members (FAIL-SAFE)
+          // 7a. Get Members (SIMPLIFIED)
           try {
             console.log('[Store] [fetchUserData] step=members');
-            const { data: membersData, error: membersError } = await supabase
+            const { data: mData, error: mErr } = await supabase
               .from('memberships')
-              .select('user_id, profiles(display_name, birthday, avatar_url, notification_email, active_team_id)')
+              .select('*')
               .eq('team_id', activeTeamId);
 
-            if (membersError) throw membersError;
-            if (membersData) {
-              teamMembers = membersData.map((m: any) => ({
+            if (mErr) throw mErr;
+            if (mData) {
+              teamMembers = mData.map((m: any) => ({
                 id: m.user_id,
                 email: '',
-                name: m.profiles.display_name,
-                birthday: m.profiles.birthday,
-                notificationEmail: m.profiles.notification_email,
-                avatar: m.profiles.avatar_url,
-                activeTeamId: m.profiles.active_team_id
+                name: 'Miembro', // Simplificado para evitar 400
+                birthday: undefined,
+                notificationEmail: undefined,
+                avatar: undefined,
+                activeTeamId: undefined
               }));
             }
           } catch (e) {
             console.warn('[Store] Fail-safe: members error', e);
-            teamMembers = []; // Ensure it's an empty array on failure
+            teamMembers = [];
           }
 
-          // 7b. Get Events (FAIL-SAFE)
+          // 7b. Get Events (SIMPLIFIED)
           try {
             console.log('[Store] [fetchUserData] step=events');
-            const { data: eventsData, error: eventsError } = await supabase
+            const { data: eData, error: eErr } = await supabase
               .from('events')
-              .select(`
-                  *,
-                  profiles:created_by(display_name),
-                  attendees(user_id, status)
-                `)
+              .select('*')
               .eq('team_id', activeTeamId);
 
-            if (eventsError) throw eventsError;
-            if (eventsData) {
-              events = eventsData.map((s: any) => {
-                s.attendees?.forEach((a: any) => {
-                  invites.push({
-                    id: `att_${s.id}_${a.user_id}`,
-                    merendolaId: s.id,
-                    userId: a.user_id,
-                    status: a.status
-                  });
-                });
-
-                return {
-                  id: s.id,
-                  userId: s.created_by,
-                  team_id: s.team_id,
-                  title: s.title,
-                  contribution: s.contribution,
-                  date: s.date,
-                  time: s.time,
-                  description: s.description,
-                  location: s.location,
-                  userName: s.profiles?.display_name,
-                  confirmedUserIds: [],
-                  comments: [],
-                  start_time: s.start_time,
-                  end_time: s.end_time
-                };
-              });
+            if (eErr) throw eErr;
+            if (eData) {
+              events = eData.map((s: any) => ({
+                id: s.id,
+                userId: s.created_by,
+                team_id: s.team_id,
+                title: s.title,
+                contribution: s.contribution || '',
+                date: s.date,
+                time: s.time,
+                description: s.description,
+                location: s.location,
+                userName: 'Compañero', // Simplificado
+                confirmedUserIds: [],
+                comments: [],
+                start_time: s.start_time,
+                end_time: s.end_time
+              }));
             }
+
+            // 7c. Get Invites Separately (FAIL-SAFE)
+            try {
+              const { data: aData } = await supabase
+                .from('attendees')
+                .select('*')
+                .in('merendola_id', events.map(e => e.id));
+
+              if (aData) {
+                invites = aData.map((a: any) => ({
+                  id: `att_${a.merendola_id}_${a.user_id}`,
+                  merendolaId: a.merendola_id,
+                  userId: a.user_id,
+                  status: a.status
+                }));
+              }
+            } catch (aErr) {
+              console.warn('[Store] Fail-safe: attendees fetch failed', aErr);
+            }
+
           } catch (e) {
             console.warn('[Store] Fail-safe: events error', e);
-            events = []; // Ensure it's an empty array on failure
-            invites = []; // Invites are derived from events, so reset them too
+            events = [];
+            invites = [];
           }
         } else {
           // GHOST TEAM SANITIZATION

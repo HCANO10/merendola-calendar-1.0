@@ -461,7 +461,7 @@ const Dashboard: React.FC = () => {
                 <div className="pt-4 flex flex-col gap-4">
                   <div className="flex items-center justify-between px-4 py-2">
                     <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Organizado por</span>
-                    <span className="text-sm font-black text-primary">{selectedEvent.resource?.creator || 'Alguien'}</span>
+                    <span className="text-sm font-black text-primary">{selectedEvent.resource?.userName || selectedEvent.resource?.creator || 'Alguien'}</span>
                   </div>
                   <div className="flex gap-4">
                     <button
