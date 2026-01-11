@@ -41,19 +41,24 @@ const Dashboard: React.FC = () => {
   const [location, setLocation] = useState(''); // NEW: Location field
   const [toast, setToast] = useState<string | null>(null);
 
-  if (loading && state.team) return <div className="p-10 h-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 font-bold text-slate-500 uppercase tracking-widest text-xs">Cargando eventos...</div>;
+  // 1. Protección contra falta de usuario
+  if (!state.user) return <div className="p-10 h-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 font-bold text-slate-500 uppercase tracking-widest text-xs">Cargando usuario...</div>;
 
-  if (!state.team) return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-950 h-full text-center">
-      <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter mb-4">No tienes equipo seleccionado</h2>
-      <button
-        onClick={() => window.location.href = '/team-setup'}
-        className="px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-transform"
-      >
-        Ir a Equipos
-      </button>
-    </div>
-  );
+  // 2. Protección contra falta de equipo (Redirección automática)
+  if (!state.team) {
+    setTimeout(() => {
+      window.location.href = '/team-setup';
+    }, 1000);
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-950 h-full text-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter mb-2">No tienes equipo seleccionado</h2>
+        <p className="text-slate-500 font-medium mb-4">Redirigiendo a creación de equipo...</p>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="p-10 h-full flex items-center justify-center bg-slate-50 dark:bg-slate-950 font-bold text-slate-500 uppercase tracking-widest text-xs">Cargando eventos...</div>;
 
 
   const fetchDashboardData = async () => {
@@ -259,24 +264,26 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
-            <div className="py-2">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
-              <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team?.join_code}</p>
+          {state.team.join_code && (
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 pl-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
+              <div className="py-2">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Código de Invitación</p>
+                <p className="text-xl font-mono font-black text-primary tracking-tighter leading-none">{state.team.join_code}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(state.team?.join_code || '');
+                  setToast("Código copiado al portapapeles");
+                  setTimeout(() => setToast(null), 3000);
+                }}
+                className="h-14 px-4 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm hover:bg-primary hover:text-white transition-all group gap-2"
+                title="Copiar código"
+              >
+                <span className="material-symbols-outlined transition-transform group-active:scale-90 text-lg">content_copy</span>
+                <span className="text-xs font-black uppercase">Copiar</span>
+              </button>
             </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(state.team?.join_code || '');
-                setToast("Código copiado al portapapeles");
-                setTimeout(() => setToast(null), 3000);
-              }}
-              className="h-14 px-4 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-sm hover:bg-primary hover:text-white transition-all group gap-2"
-              title="Copiar código"
-            >
-              <span className="material-symbols-outlined transition-transform group-active:scale-90 text-lg">content_copy</span>
-              <span className="text-xs font-black uppercase">Copiar</span>
-            </button>
-          </div>
+          )}
 
           <NotificationBell />
         </div>

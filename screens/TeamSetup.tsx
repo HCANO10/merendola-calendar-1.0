@@ -13,6 +13,7 @@ const TeamSetup: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [isCreatingSpace, setIsCreatingSpace] = useState(false);
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,17 +32,16 @@ const TeamSetup: React.FC = () => {
           }
         ]);
 
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error('Ya existe un equipo con ese nombre o se ha producido un conflicto. Prueba con otro nombre.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
-      setToast("¡Equipo creado con éxito!");
+      // Silk Edition: Show success and wait for triggers
+      setIsCreatingSpace(true);
+      setToast("¡Equipo creado! Preparando tu entorno...");
+
       setTimeout(() => {
-        window.location.reload();
-      }, 500);
+        window.location.href = '/dashboard';
+      }, 1000);
+
     } catch (err: any) {
       console.error('Error creating team:', err);
       alert(err.message || 'Error al crear el equipo');
@@ -255,35 +255,46 @@ const TeamSetup: React.FC = () => {
         )}
 
         {activeTab === 'create' && (
-          <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[3rem] p-10 md:p-14 shadow-2xl shadow-slate-200/50 dark:shadow-black/50 animate-in zoom-in-95 duration-300">
-            <div className="flex flex-col items-center text-center mb-10">
-              <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6">
-                <span className="material-symbols-outlined text-4xl">add_business</span>
+          <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[3rem] p-10 md:p-14 shadow-2xl shadow-slate-200/50 dark:shadow-black/50 animate-in zoom-in-95 duration-300 relative overflow-hidden">
+            {isCreatingSpace ? (
+              <div className="flex flex-col items-center justify-center py-10 animate-in fade-in zoom-in-95">
+                <div className="w-20 h-20 border-4 border-primary border-t-transparent rounded-full animate-spin mb-8 shadow-2xl shadow-primary/20"></div>
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic text-center mb-2">Creando tu espacio...</h2>
+                <p className="text-slate-500 font-medium text-center">Configurando tu nuevo entorno de merienda</p>
               </div>
-              <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic">Nuevo Equipo</h2>
-              <p className="text-slate-500 font-medium mt-2">Ponle nombre a tu comunidad de merienda.</p>
-            </div>
+            ) : (
+              <>
+                <div className="flex flex-col items-center text-center mb-10">
+                  <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-4xl">add_business</span>
+                  </div>
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic">Nuevo Equipo</h2>
+                  <p className="text-slate-500 font-medium mt-2">Ponle nombre a tu comunidad de merienda.</p>
+                </div>
 
-            <form onSubmit={handleCreateTeam} className="space-y-8">
-              <div className="flex flex-col gap-3">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em] ml-2">Nombre del Proyecto</label>
-                <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-3xl h-16 px-8 text-xl font-bold outline-none transition-all"
-                  placeholder="Ej: Marketing Team, Dev Squad..."
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || !teamName.trim()}
-                className="w-full bg-primary hover:opacity-90 text-white h-16 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {loading ? 'Creando...' : 'Lanzar Equipo'}
-                <span className="material-symbols-outlined">rocket_launch</span>
-              </button>
-            </form>
+                <form onSubmit={handleCreateTeam} className="space-y-8">
+                  <div className="flex flex-col gap-3">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em] ml-2">Nombre del Proyecto</label>
+                    <input
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-3xl h-16 px-8 text-xl font-bold outline-none transition-all"
+                      placeholder="Ej: Marketing Team, Dev Squad..."
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading || !teamName.trim()}
+                    className="w-full bg-primary hover:opacity-90 text-white h-16 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-primary/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:scale-95 disabled:shadow-none"
+                  >
+                    {loading ? 'Procesando...' : 'Lanzar Equipo'}
+                    <span className="material-symbols-outlined animate-pulse">rocket_launch</span>
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         )}
 
