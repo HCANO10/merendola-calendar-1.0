@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useStore } from '../store';
 import MainLayout from '../src/layouts/MainLayout';
-import { UI_TEXT } from '../constants';
 
 const TeamSetup: React.FC = () => {
   const { state } = useStore();
@@ -14,47 +13,20 @@ const TeamSetup: React.FC = () => {
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!teamName.trim() || !state.user?.id) return;
+    if (!teamName.trim()) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Inserción del Equipo
-      // Generamos un handle y un código de invitación (invite_code en DB)
-      const handle = teamName.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 100);
-      const inviteCode = (teamName.substring(0, 3).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000));
-
-      const { data: newTeam, error: teamErr } = await supabase
+      // DELEGACIÓN AL BACKEND: El trigger se encarga de Membership y Profile Update
+      const { error: teamErr } = await supabase
         .from('teams')
-        .insert({
-          name: teamName,
-          handle: handle,
-          invite_code: inviteCode
-        })
-        .select()
-        .single();
+        .insert({ name: teamName.trim() });
 
       if (teamErr) throw teamErr;
 
-      // 2. Inserción inmediata de Membership (Admin)
-      const { error: memErr } = await supabase
-        .from('memberships')
-        .insert({
-          team_id: newTeam.id,
-          user_id: state.user.id,
-          role: 'admin'
-        });
-
-      if (memErr) throw memErr;
-
-      // 3. Actualizar active_team_id en el perfil para el flujo de guardas
-      await supabase
-        .from('profiles')
-        .update({ active_team_id: newTeam.id })
-        .eq('user_id', state.user.id);
-
-      // 4. ÉXITO: Recarga vital para sincronizar todo el estado
+      // ÉXITO: Recarga vital para que las guardas detecten el nuevo active_team_id
       window.location.reload();
     } catch (err: any) {
       console.error('Error creating team:', err);
@@ -71,34 +43,26 @@ const TeamSetup: React.FC = () => {
     setError(null);
 
     try {
-      // 1. Buscar equipo por código (invite_code en DB)
+      // 1. Buscar equipo por código de invitación
       const { data: team, error: findErr } = await supabase
         .from('teams')
         .select('id')
         .eq('invite_code', joinCode.trim().toUpperCase())
         .single();
 
-      if (findErr || !team) throw new Error('Equipo no encontrado. Revisa el código.');
+      if (findErr || !team) throw new Error('Código de equipo no válido.');
 
-      // 2. Insertar Membership (Member)
+      // 2. Insertar Membership (El trigger actualizará el active_team_id del perfil)
       const { error: memErr } = await supabase
         .from('memberships')
         .insert({
           team_id: team.id,
-          user_id: state.user.id,
-          role: 'member'
+          user_id: state.user.id
         });
 
-      // Si el error es 23505 significa que ya es miembro, procedemos
       if (memErr && memErr.code !== '23505') throw memErr;
 
-      // 3. Actualizar active_team_id
-      await supabase
-        .from('profiles')
-        .update({ active_team_id: team.id })
-        .eq('user_id', state.user.id);
-
-      // 4. ÉXITO: Recarga
+      // 3. ÉXITO: Recarga
       window.location.reload();
     } catch (err: any) {
       console.error('Error joining team:', err);
@@ -110,30 +74,30 @@ const TeamSetup: React.FC = () => {
   return (
     <MainLayout>
       <div className="flex flex-col items-center justify-center py-12 px-4 md:px-10 min-h-[calc(100vh-80px)]">
-        <div className="w-full max-w-[520px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-10">
+        <div className="w-full max-w-[500px] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-8 md:p-12">
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-black tracking-tight mb-2">Configura tu Equipo</h1>
-            <p className="text-slate-500 dark:text-slate-400">Para empezar a usar el calendario, necesitas un equipo.</p>
+            <h1 className="text-3xl font-black tracking-tight mb-3">Tu Equipo</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Configura dónde vas a organizar tus meriendas.</p>
           </div>
 
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl mb-10">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl mb-8">
             <button
               onClick={() => { setActiveTab('create'); setError(null); }}
-              className={`flex-1 py-3 font-bold rounded-xl transition-all ${activeTab === 'create' ? 'bg-white dark:bg-slate-700 shadow-lg text-primary' : 'text-slate-500'}`}
+              className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'create' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500'}`}
             >
-              Crear Equipo
+              Crear Nuevo
             </button>
             <button
               onClick={() => { setActiveTab('join'); setError(null); }}
-              className={`flex-1 py-3 font-bold rounded-xl transition-all ${activeTab === 'join' ? 'bg-white dark:bg-slate-700 shadow-lg text-primary' : 'text-slate-500'}`}
+              className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'join' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500'}`}
             >
-              Unirse con Código
+              Tengo un Código
             </button>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/20 rounded-xl text-red-600 dark:text-red-400 text-sm font-bold flex items-center gap-2">
-              <span className="material-symbols-outlined">error</span>
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl text-red-600 dark:text-red-400 text-xs font-bold flex items-center gap-2 animate-shake">
+              <span className="material-symbols-outlined text-sm">error</span>
               {error}
             </div>
           )}
@@ -141,10 +105,10 @@ const TeamSetup: React.FC = () => {
           {activeTab === 'create' ? (
             <form onSubmit={handleCreateTeam} className="space-y-6">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Nombre del Equipo</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Nombre del equipo</label>
                 <input
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 h-14 px-6 font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  placeholder="Ej: Marketing Team"
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 h-14 px-6 font-bold outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all text-lg"
+                  placeholder="Ej: Los Merendadores"
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
                   required
@@ -153,19 +117,19 @@ const TeamSetup: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !teamName.trim()}
-                className="w-full bg-primary hover:bg-primary/90 text-white h-14 rounded-xl font-black shadow-xl shadow-primary/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-lg"
+                className="w-full bg-primary hover:opacity-90 text-white h-14 rounded-2xl font-black shadow-xl shadow-primary/20 transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-lg group"
               >
-                {loading ? 'Creando...' : 'Crear y Continuar'}
-                {!loading && <span className="material-symbols-outlined font-bold">rocket_launch</span>}
+                {loading ? 'Procesando...' : 'Crear Equipo'}
+                {!loading && <span className="material-symbols-outlined font-bold group-hover:translate-x-1 transition-transform">arrow_forward</span>}
               </button>
             </form>
           ) : (
             <form onSubmit={handleJoinTeam} className="space-y-6">
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Código de Invitación</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Código de invitación</label>
                 <input
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 h-14 px-6 font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all tracking-widest text-center uppercase"
-                  placeholder="XXX-0000"
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 h-14 px-6 font-bold outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all tracking-[0.25em] text-center uppercase text-xl"
+                  placeholder="ABC-1234"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                   required
@@ -174,9 +138,9 @@ const TeamSetup: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading || !joinCode.trim()}
-                className="w-full bg-slate-900 dark:bg-primary hover:opacity-90 text-white h-14 rounded-xl font-black shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-lg"
+                className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 hover:opacity-90 text-white h-14 rounded-2xl font-black shadow-xl transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
               >
-                {loading ? 'Buscando...' : 'Unirse al Equipo'}
+                {loading ? 'Verificando...' : 'Unirse ahora'}
                 {!loading && <span className="material-symbols-outlined font-bold">login</span>}
               </button>
             </form>
