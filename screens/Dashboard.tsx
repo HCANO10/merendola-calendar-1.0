@@ -9,6 +9,7 @@ import { useStore } from '../store';
 import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';
 import NotificationBell from '../src/components/NotificationBell';
+import CreateEventModal from '../src/components/CreateEventModal';
 import { sendEventInvitation } from '../src/utils/emailService';
 
 const locales = {
@@ -24,7 +25,7 @@ const localizer = dateFnsLocalizer({
 });
 
 const Dashboard: React.FC = () => {
-  const { state, respondToInvite } = useStore();
+  const { state, fetchUserData, respondToInvite } = useStore();
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -32,11 +33,7 @@ const Dashboard: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotInfo | null>(null);
 
-  // Form state
-  const [title, setTitle] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
+  // Layout state
   const [toast, setToast] = useState<string | null>(null);
 
   // 1. DATA ADAPTATION
@@ -64,58 +61,6 @@ const Dashboard: React.FC = () => {
 
   // 3. RENDERIZADO PRINCIPAL (SIEMPRE SI NO CARGA)
 
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!state.team?.id || !state.user?.id || !selectedSlot) return;
-
-    setCreating(true);
-    try {
-      const { data: newEvent, error } = await supabase
-        .from('events')
-        .insert({
-          team_id: state.team.id,
-          created_by: state.user.id,
-          title: title,
-          start_time: selectedSlot.start.toISOString(),
-          end_time: selectedSlot.end.toISOString(),
-          date: format(selectedSlot.start, 'yyyy-MM-dd'),
-          time: format(selectedSlot.start, 'HH:mm:ss'),
-          description: description,
-          location: location
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const recipientEmails = (state.teamMembers || [])
-        .map(m => m.notificationEmail || m.email)
-        .filter(email => !!email) as string[];
-
-      await sendEventInvitation(
-        { title, start_time: selectedSlot.start.toISOString(), location },
-        state.team.name,
-        state.user.name || 'Un compañero',
-        recipientEmails
-      );
-
-      setToast("¡Evento creado y notificaciones enviadas!");
-      setTimeout(() => setToast(null), 5000);
-      setShowCreateModal(false);
-      setTitle('');
-      setDescription('');
-      setLocation('');
-
-      // Full refresh to ensure clean state
-      window.location.reload();
-    } catch (err: any) {
-      console.error('Error creating event:', err);
-      alert('Error al crear el evento: ' + (err.message || 'Error desconocido'));
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleSelectSlot = (slotInfo: SlotInfo) => {
     setSelectedSlot(slotInfo);
     setShowCreateModal(true);
@@ -124,6 +69,25 @@ const Dashboard: React.FC = () => {
   const handleSelectEvent = (event: any) => {
     setSelectedEvent(event);
     setShowDetailModal(true);
+  };
+
+  const handleRSVP = async (event_id: string, status: 'going' | 'not_going') => {
+    if (!state.user?.id) return;
+    try {
+      const { error } = await supabase
+        .from('event_participants')
+        .upsert({
+          event_id,
+          user_id: state.user.id,
+          status
+        });
+      if (error) throw error;
+      setToast(status === 'going' ? "¡Te has apuntado! 🙋‍♂️" : "No asistirás 🙅‍♂️");
+      setTimeout(() => setToast(null), 3000);
+      fetchUserData(state.user.id); // Refresh data
+    } catch (err) {
+      console.error("Error in RSVP:", err);
+    }
   };
 
   const birthdayEvents = (state.teamMembers || [])
@@ -158,6 +122,16 @@ const Dashboard: React.FC = () => {
         <div className="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all duration-700"></div>
         <div className="flex items-center gap-6 relative z-10">
           <TeamSwitcher />
+          <button
+            onClick={() => {
+              setSelectedSlot(null);
+              setShowCreateModal(true);
+            }}
+            className="hidden md:flex bg-primary text-white h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all items-center gap-3 border-2 border-primary/20"
+          >
+            <span className="material-symbols-outlined text-lg font-black">add_circle</span>
+            Crear Merienda
+          </button>
           <div className="h-16 w-px bg-slate-100 dark:bg-slate-800 hidden lg:block mx-2"></div>
           <div>
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 font-display">Estás en</h2>
@@ -165,23 +139,34 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 relative z-10">
-          {state.team?.join_code && (
-            <div className="bg-slate-50 dark:bg-slate-800/40 p-2 pl-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 flex items-center gap-6 shadow-sm">
-              <div className="py-2">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Código de Invitación</p>
-                <p className="text-3xl font-mono font-black text-primary tracking-tighter leading-none">{state.team.join_code}</p>
+        <div className="flex flex-wrap items-center gap-6 relative z-10">
+          {state.team?.join_code ? (
+            <div className="bg-primary/5 dark:bg-primary/10 border-2 border-primary/20 rounded-[2.5rem] p-6 flex flex-col md:flex-row items-center gap-6 shadow-xl shadow-primary/5 group/code transition-all hover:border-primary/40">
+              <div className="text-center md:text-left">
+                <h3 className="text-sm font-black text-primary uppercase tracking-widest mb-1">Invita a tu equipo</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Comparte este código para unirse</p>
               </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(state.team?.join_code || '');
-                  setToast("Código copiado al portapapeles");
-                  setTimeout(() => setToast(null), 3000);
-                }}
-                className="h-16 px-6 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-lg hover:bg-primary hover:text-white transition-all group gap-3 border border-slate-100 dark:border-slate-700"
-              >
-                <span className="material-symbols-outlined text-2xl font-black">content_copy</span>
-              </button>
+              <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl border border-primary/10 shadow-inner">
+                <code className="px-4 py-2 font-mono text-2xl font-black text-primary tracking-[0.2em]">
+                  {state.team.join_code}
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(state.team?.join_code || '');
+                    setToast("¡Código copiado! Compártelo con tu equipo.");
+                    setTimeout(() => setToast(null), 3000);
+                  }}
+                  className="h-12 px-6 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-sm font-black">content_copy</span>
+                  Copiar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] p-6 flex items-center gap-4 animate-pulse">
+              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Cargando código...</span>
             </div>
           )}
           <NotificationBell />
@@ -220,47 +205,17 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* CREATE MODAL */}
-      {showCreateModal && selectedSlot && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => setShowCreateModal(false)}></div>
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] p-10 relative z-10 shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic mb-8 flex items-center gap-4">
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
-                <span className="material-symbols-outlined text-2xl">celebration</span>
-              </div>
-              Nuevo Evento
-            </h2>
-            <form onSubmit={handleCreateEvent} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">¿Qué celebramos?</label>
-                <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 h-16 rounded-2xl px-6 text-lg font-bold outline-none focus:border-primary"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ej: Merendola, Pizza..."
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">¿Dónde?</label>
-                <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 h-16 rounded-2xl px-6 text-lg font-bold outline-none focus:border-primary"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Sala Relax, Terraza..."
-                />
-              </div>
-              <div className="flex gap-4">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase text-xs tracking-widest text-slate-500 hover:bg-slate-100">Cancelar</button>
-                <button type="submit" disabled={creating || !title.trim()} className="flex-[2] bg-primary text-white h-16 rounded-2xl font-black uppercase tracking-widest">
-                  {creating ? 'Guardando...' : 'Lanzar Invitaciones'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* CREATE MODAL EXTRACTED */}
+      <CreateEventModal
+        isOpen={showCreateModal}
+        selectedSlot={selectedSlot}
+        onClose={() => setShowCreateModal(false)}
+        onEventCreated={(msg) => {
+          setToast(msg);
+          setTimeout(() => setToast(null), 5000);
+          if (state.user?.id) fetchUserData(state.user.id); // Recargar datos
+        }}
+      />
 
       {/* DETAIL MODAL */}
       {showDetailModal && selectedEvent && (
@@ -299,8 +254,18 @@ const Dashboard: React.FC = () => {
                     <span className="text-sm font-black text-primary">{selectedEvent.resource?.userName || 'Un compañero'}</span>
                   </div>
                   <div className="flex gap-4">
-                    <button onClick={async () => { await respondToInvite(selectedEvent.resource.id, 'no'); setShowDetailModal(false); }} className="flex-1 h-14 rounded-xl font-black uppercase text-[10px] tracking-widest text-red-500 border border-red-100">No puedo</button>
-                    <button onClick={async () => { await respondToInvite(selectedEvent.resource.id, 'si'); setShowDetailModal(false); }} className="flex-[2] bg-primary text-white h-14 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20">¡Asistiré!</button>
+                    <button
+                      onClick={() => { handleRSVP(selectedEvent.resource.id, 'not_going'); setShowDetailModal(false); }}
+                      className="flex-1 h-14 rounded-xl font-black uppercase text-[10px] tracking-widest text-slate-400 border border-slate-100 hover:bg-slate-50 transition-all"
+                    >
+                      No voy 🙅‍♂️
+                    </button>
+                    <button
+                      onClick={() => { handleRSVP(selectedEvent.resource.id, 'going'); setShowDetailModal(false); }}
+                      className="flex-[2] bg-primary text-white h-14 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all"
+                    >
+                      Me apunto 🙋‍♂️
+                    </button>
                   </div>
                 </div>
               </div>

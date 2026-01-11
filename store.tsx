@@ -147,7 +147,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const { data: newProfile, error: insErr } = await supabase
           .from('profiles')
           .upsert(
-            { user_id: userId, notification_email: session?.user?.email, display_name: initialUser.name },
+            { user_id: userId, email: session?.user?.email, display_name: initialUser.name },
             { onConflict: 'user_id' }
           )
           .select('*')
@@ -171,16 +171,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const user: User = {
         id: userId,
-        email: session?.user.email || '',
+        email: session?.user.email || profile?.email || '',
         name: profile?.display_name || initialUser.name,
         birthday: profile?.birthday,
-        notificationEmail: profile?.notification_email,
         avatar: profile?.avatar_url,
         activeTeamId: profile?.active_team_id
       };
 
-      // EARLY EXIT: If profile incomplete, stop here
-      const isProfileIncomplete = !user.birthday || !user.notificationEmail;
+      // EARLY EXIT: If profile incomplete (missing birthday), stop here
+      const isProfileIncomplete = !user.birthday;
       if (isProfileIncomplete) {
         console.log('[Store] [fetchUserData] status=incomplete_profile');
         setState(prev => ({ ...prev, user }));
@@ -252,24 +251,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (activeTeam) {
           team = activeTeam;
 
-          // 7a. Get Members (SIMPLIFIED)
+          // 7a. Get Members (HARDENED with profiles)
           try {
             console.log('[Store] [fetchUserData] step=members');
             const { data: mData, error: mErr } = await supabase
               .from('memberships')
-              .select('*')
+              .select('user_id, role, profiles(email, display_name, birthday, avatar_url)')
               .eq('team_id', activeTeamId);
 
             if (mErr) throw mErr;
             if (mData) {
               teamMembers = mData.map((m: any) => ({
                 id: m.user_id,
-                email: '',
-                name: 'Miembro', // Simplificado para evitar 400
-                birthday: undefined,
-                notificationEmail: undefined,
-                avatar: undefined,
-                activeTeamId: undefined
+                email: m.profiles?.email || '',
+                name: m.profiles?.display_name || 'Miembro',
+                birthday: m.profiles?.birthday,
+                avatar: m.profiles?.avatar_url,
+                role: m.role
               }));
             }
           } catch (e) {

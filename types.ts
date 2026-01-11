@@ -7,7 +7,6 @@ export interface User {
   email: string;
   name?: string; // display_name
   birthday?: string;
-  notificationEmail?: string;
   avatar?: string;
   activeTeamId?: string;
 }

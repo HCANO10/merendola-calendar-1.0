@@ -13,19 +13,13 @@ const Profile: React.FC = () => {
   const navigate = useNavigate();
   const [name, setName] = useState(state.user?.name || '');
   const [birthday, setBirthday] = useState(state.user?.birthday || '');
-  const [notificationEmail, setNotificationEmail] = useState(state.user?.email || '');
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
-  const isEmailValid = useMemo(() => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(notificationEmail);
-  }, [notificationEmail]);
-
   const isFormValid = useMemo(() => {
-    return name.trim().length > 0 && birthday !== '' && isEmailValid;
-  }, [name, birthday, isEmailValid]);
+    return name.trim().length > 0 && birthday !== '';
+  }, [name, birthday]);
 
   const handleSave = async () => {
     if (!birthday) {
@@ -43,7 +37,6 @@ const Profile: React.FC = () => {
           full_name: name,
           display_name: name,
           birthday: birthday,
-          notification_email: notificationEmail,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', state.user.id);
@@ -52,8 +45,7 @@ const Profile: React.FC = () => {
 
       updateUser({
         name,
-        birthday,
-        notificationEmail
+        birthday
       });
 
       setShowToast(true);
@@ -106,22 +98,17 @@ const Profile: React.FC = () => {
 
             <div className="flex flex-col gap-2">
               <label className="text-xs font-black uppercase text-slate-400">
-                {UI_TEXT.PROFILE.EMAIL_LABEL}
+                Email vinculado
               </label>
               <div className="relative">
-                <input
-                  className={`w-full rounded-xl border ${!isEmailValid && notificationEmail ? 'border-red-500 focus:ring-red-200' : 'border-slate-200 dark:border-slate-700'} bg-white dark:bg-[#101a22] h-14 px-6 pl-12 font-medium outline-none focus:ring-2 focus:ring-primary/20 transition-all`}
-                  type="email"
-                  value={notificationEmail}
-                  onChange={(e) => setNotificationEmail(e.target.value)}
-                  placeholder="tu@email.com"
-                  required
-                />
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">mail</span>
+                <div className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 h-14 px-12 flex items-center font-bold text-slate-500 overflow-hidden truncate italic">
+                  {state.user?.email}
+                </div>
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">verified_user</span>
               </div>
-              {!isEmailValid && notificationEmail && (
-                <p className="text-red-500 text-xs font-bold">{UI_TEXT.PROFILE.EMAIL_ERROR}</p>
-              )}
+              <p className="text-[10px] text-slate-400 font-medium px-2 leading-tight">
+                Este email se usa para notificaciones y seguridad. No es editable para proteger tu identidad.
+              </p>
             </div>
 
             <button
