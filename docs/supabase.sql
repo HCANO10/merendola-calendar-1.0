@@ -280,4 +280,7 @@ create trigger on_merendola_created
   after insert on merendolas
   for each row execute procedure handle_new_merendola();
 
+-- FORCE CACHE RELOAD
+NOTIFY pgrst, 'reload schema';
+
 -- END

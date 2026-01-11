@@ -9,6 +9,8 @@ interface StoreContextType {
   session: Session | null;
   authLoading: boolean;
   loadError: boolean;
+  dbNotInitialized: boolean;
+  dbErrorMessage: string | null;
   fetchUserData: (userId: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ data: any, error: any }>;
@@ -54,19 +56,39 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [loadError, setLoadError] = useState(false);
+  const [dbNotInitialized, setDbNotInitialized] = useState(false);
+  const [dbErrorMessage, setDbErrorMessage] = useState<string | null>(null);
+  const fetchInFlight = React.useRef<string | null>(null);
 
   const fetchUserData = useCallback(async (userId: string) => {
+    // 0. Loop Guard: If already fetching THIS user, skip
+    if (fetchInFlight.current === userId) return;
+    fetchInFlight.current = userId;
+
+    console.log('--- fetchUserData Start ---', userId);
+
     // Safety timeout to avoid infinite loading
     const timeoutId = setTimeout(() => {
       setAuthLoading(false);
       setLoadError(true);
+      fetchInFlight.current = null;
       console.warn('fetchUserData timed out after 10s');
     }, 10000);
 
     setLoadError(false);
+    setDbNotInitialized(false);
 
     try {
-      // 1. Get Profile
+      // 1. Set immediate user state from session to avoid "null" rebounces
+      const initialUser: User = {
+        id: userId,
+        email: session?.user?.email || '',
+        name: session?.user?.email?.split('@')[0] || 'Usuario',
+      };
+
+      setState(prev => ({ ...prev, user: initialUser }));
+
+      // 2. Get Profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -74,25 +96,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         .single();
 
       if (profileError) {
+        // DETECT MISSING DATABASE / TABLE
+        const isTableMissing = profileError.code === 'PGRST204' ||
+          profileError.code === 'PGRST205' ||
+          profileError.message?.includes('schema cache') ||
+          profileError.message?.includes('Relation "profiles" does not exist');
+
+        if (isTableMissing) {
+          console.error('DATABASE NOT INITIALIZED');
+          setDbNotInitialized(true);
+          setDbErrorMessage("La base de datos no está inicializada (falta la tabla profiles). Abre Supabase → SQL Editor y ejecuta docs/supabase.sql. Luego ejecuta: NOTIFY pgrst, 'reload schema';");
+          return;
+        }
+
         if (profileError.code !== 'PGRST116') {
           console.error('Error fetching profile:', profileError);
           setLoadError(true);
           return;
         }
-        // If profile doesn't exist, we'll stop here (it should be handled by trigger)
-        console.error('Profile not found for userId:', userId);
-        setLoadError(true);
-        return;
+        // If profile doesn't exist but table DOES, we continue (maybe user is new)
+        console.warn('Profile record not found, continuing with empty profile');
       }
 
       const user: User = {
-        id: profile.user_id,
+        id: userId,
         email: session?.user.email || '',
-        name: profile.display_name || '',
-        birthday: profile.birthday,
-        notificationEmail: profile.notification_email,
-        avatar: profile.avatar_url,
-        activeTeamId: profile.active_team_id
+        name: profile?.display_name || initialUser.name,
+        birthday: profile?.birthday,
+        notificationEmail: profile?.notification_email,
+        avatar: profile?.avatar_url,
+        activeTeamId: profile?.active_team_id
       };
 
       let team = null;
@@ -195,6 +228,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       clearTimeout(timeoutId);
       setAuthLoading(false);
+      fetchInFlight.current = null;
     }
   }, [session]);
 
@@ -421,7 +455,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <StoreContext.Provider value={{
-      state, session, authLoading, loadError, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
+      state, session, authLoading, loadError, dbNotInitialized, dbErrorMessage, fetchUserData, signUp, signIn, signOut, resetPasswordForEmail, updateUser, createTeam, joinTeam, setTeam, addSnack, editSnack, deleteSnack, toggleAttendance, respondToInvite, markNotificationRead, addComment
     }}>
       {children}
     </StoreContext.Provider>
