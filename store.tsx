@@ -390,8 +390,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const teamNameTrimmed = name.trim();
     if (!teamNameTrimmed) throw new Error('Escribe un nombre de equipo');
 
-    console.log("[Store] create_team payload", { team_name: teamNameTrimmed });
-
     try {
       const { data, error } = await supabase.rpc('create_team', { team_name: teamNameTrimmed });
 

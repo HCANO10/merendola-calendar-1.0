@@ -3,12 +3,19 @@
 create extension if not exists pgcrypto;
 create extension if not exists "uuid-ossp";
 
--- CLEANUP (allows re-running script cleanly)
+-- CLEANUP (permite re-ejecutar el script limpiamente)
 drop trigger if exists on_merendola_created on merendolas;
-drop function if exists handle_new_merendola();
-drop function if exists create_team(text);
-drop function if exists join_team(text);
-drop function if exists join_team_by_handle(text);
+drop function if exists handle_new_merendola() cascade;
+drop function if exists create_team(text) cascade;
+drop function if exists join_team(text) cascade;
+drop function if exists join_team_by_handle(text) cascade;
+
+-- Si quieres borrar todos los datos y empezar de cero, descomenta estas líneas:
+-- drop table if exists attendees cascade;
+-- drop table if exists merendolas cascade;
+-- drop table if exists memberships cascade;
+-- drop table if exists teams cascade;
+-- drop table if exists profiles cascade;
 
 -- 1. PROFILES
 create table if not exists profiles (
@@ -62,6 +69,16 @@ create table if not exists merendolas (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+-- Asegurar que la columna 'date' existe si la tabla ya fue creada (evita error 42703 en re-ejecuciones)
+do $$ begin
+  alter table merendolas add column date date not null default now();
+exception when duplicate_column then null; end $$;
+
+-- Asegurar que la columna 'user_id' existe en merendolas
+do $$ begin
+  alter table merendolas add column user_id uuid references profiles(user_id) on delete set null;
+exception when duplicate_column then null; end $$;
+
 create index if not exists idx_merendolas_team_date on merendolas (team_id, date);
 
 -- 5. ATTENDEES
@@ -72,9 +89,10 @@ create table if not exists attendees (
   responded_at timestamp with time zone,
   primary key (merendola_id, user_id)
 );
--- Ensure UNIQUE constraint (redundant with PK but requested for explicit check)
--- "primary key (merendola_id, user_id)" implies strict uniqueness, so 'unique(merendola_id, user_id)' is implicit.
--- We won't add an extra unique index to save space, relying on PK.
+-- Asegurar que la columna 'user_id' existe en attendees (por si se creó con una versión antigua)
+do $$ begin
+  alter table attendees add column user_id uuid references profiles(user_id) on delete cascade;
+exception when duplicate_column then null; end $$;
 
 
 -- RLS POLICIES ---------------------------------------------------------------
