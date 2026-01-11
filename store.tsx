@@ -61,14 +61,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [dbNotInitialized, setDbNotInitialized] = useState(false);
   const [dbErrorMessage, setDbErrorMessage] = useState<string | null>(null);
 
-  // Anti-loop Guards (Step 6)
+  // Anti-loop Guards
+  const didInitRef = React.useRef(false);
   const inFlightRef = React.useRef(false);
   const lastUserIdRef = React.useRef<string | null>(null);
 
   const fetchUserData = useCallback(async (userId: string) => {
-    // 0. Loop Guard: If already fetching, or already loaded this user, skip (Step 7)
+    // 0. Loop Guard: If already fetching, or already loaded this user, skip
     if (inFlightRef.current) return;
-    if (lastUserIdRef.current === userId && state.user?.id === userId && !loadError && !dbNotInitialized) {
+
+    // Check if we already have this user's data and no error state
+    const alreadyLoaded = lastUserIdRef.current === userId &&
+      state.user?.id === userId &&
+      !loadError &&
+      !dbNotInitialized;
+
+    if (alreadyLoaded) {
+      setAuthLoading(false);
       return;
     }
 
@@ -275,24 +284,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setAuthLoading(false);
       inFlightRef.current = false;
     }
-  }, [session, state.user?.id, loadError, dbNotInitialized]);
+  }, [state.user?.id, loadError, dbNotInitialized]);
 
-  // Handle Supabase Session (Step 4)
+  // Handle Supabase Session (One-shot Init)
   useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+
     console.log('[Store] AuthProvider Init', new Date().toISOString());
     let mounted = true;
 
     const initAuth = async () => {
       setAuthLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
         if (!mounted) return;
 
-        console.log('[Store] Initial Session:', session?.user?.id || 'none');
-        setSession(session);
+        console.log('[Store] Initial Session:', initialSession?.user?.id || 'none');
+        setSession(initialSession);
 
-        if (session?.user) {
-          fetchUserData(session.user.id);
+        if (initialSession?.user) {
+          fetchUserData(initialSession.user.id);
         } else {
           setAuthLoading(false);
         }
@@ -305,14 +317,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     initAuth();
 
     // Listen for changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[Store] Auth Event:', event, 'User:', session?.user?.id || 'none');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('[Store] Auth Event:', event, 'User:', newSession?.user?.id || 'none');
       if (!mounted) return;
 
-      setSession(session);
+      setSession(newSession);
 
-      if (session?.user) {
-        fetchUserData(session.user.id);
+      if (newSession?.user) {
+        fetchUserData(newSession.user.id);
       } else {
         setAuthLoading(false);
         setState({
@@ -330,7 +342,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserData]);
+  }, []); // Strictly empty deps for one-shot init
 
   // Persist State (Data)
   useEffect(() => {

@@ -141,7 +141,18 @@ const AppRoutes: React.FC = () => {
           </div>
           <div className="text-center">
             <h3 className="text-lg font-bold mb-1">Iniciando sesión</h3>
-            <p className="text-[#60798a] text-sm animate-pulse">Sincronizando con Supabase...</p>
+            <p className="text-[#60798a] text-sm animate-pulse mb-6">Sincronizando con Supabase...</p>
+
+            <button
+              onClick={() => {
+                supabase.auth.signOut().then(() => {
+                  window.location.href = '/';
+                });
+              }}
+              className="text-[#60798a] dark:text-[#a0b3c1] text-xs font-bold hover:underline"
+            >
+              ¿Tardando demasiado? Cerrar sesión
+            </button>
           </div>
         </div>
       </div>
