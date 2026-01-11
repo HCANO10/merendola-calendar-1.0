@@ -2,26 +2,37 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
-
+import { useNavigate } from 'react-router-dom';
 
 const TeamSetup: React.FC = () => {
   const { createTeam, joinTeam, signOut } = useStore();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('create');
   const [teamName, setTeamName] = useState('Los Merendadores');
-  const [inviteCode, setInviteCode] = useState(''); // New state
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const handleCreate = async () => {
     if (!teamName.trim()) return;
     setLoading(true);
-    setErrorMsg('');
     try {
       await createTeam(teamName);
-      // Navigation handled by App.tsx detecting teamId change in user object
+      showToast('¡Equipo creado con éxito!', 'success');
+      // Explicit redirect after success
+      setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
     } catch (e: any) {
       console.error(e);
-      setErrorMsg('Error al crear equipo: ' + e.message);
+      if (e.message?.includes('CONFIG_ERROR')) {
+        showToast(e.message);
+      } else {
+        showToast('Error al crear equipo: ' + (e.message || 'Error desconocido'));
+      }
     } finally {
       setLoading(false);
     }
@@ -30,14 +41,18 @@ const TeamSetup: React.FC = () => {
   const handleJoin = async () => {
     if (!inviteCode.trim()) return;
     setLoading(true);
-    setErrorMsg('');
     try {
       await joinTeam(inviteCode);
+      showToast('¡Te has unido al equipo!', 'success');
+      setTimeout(() => navigate('/dashboard', { replace: true }), 1000);
     } catch (e: any) {
       console.error(e);
-      setErrorMsg('Error al unirse: ' + e.message);
-      if (e.message.includes('inválido') || e.message.includes('invalid')) {
-        setErrorMsg('Código de invitación inválido o expirado.');
+      if (e.message?.includes('CONFIG_ERROR')) {
+        showToast(e.message);
+      } else if (e.message?.includes('inválido') || e.message?.includes('invalid')) {
+        showToast('Código de invitación inválido o expirado.');
+      } else {
+        showToast('Error al unirse: ' + (e.message || 'Error desconocido'));
       }
     } finally {
       setLoading(false);
@@ -46,6 +61,14 @@ const TeamSetup: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark">
+      {toast && (
+        <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+          }`}>
+          <span className="material-symbols-outlined">{toast.type === 'error' ? 'error' : 'check_circle'}</span>
+          <span className="font-bold">{toast.message}</span>
+        </div>
+      )}
+
       <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a262f] px-10 py-3 sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="text-primary">
@@ -85,12 +108,6 @@ const TeamSetup: React.FC = () => {
               </button>
             </div>
           </div>
-
-          {errorMsg && (
-            <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-lg text-sm font-bold text-center border border-red-100">
-              {errorMsg}
-            </div>
-          )}
 
           {activeTab === 'create' ? (
             <div className="flex flex-col gap-6">
@@ -138,10 +155,8 @@ const TeamSetup: React.FC = () => {
             </div>
           )}
         </div>
-
       </main>
     </div>
   );
 };
-
 export default TeamSetup;

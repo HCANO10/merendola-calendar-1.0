@@ -388,14 +388,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!state.user) return;
     try {
       const { data: teamId, error } = await supabase.rpc('create_team', { team_name: name });
-      if (error) throw error;
+
+      if (error) {
+        if (error.code === 'PGRST104' || error.message?.includes('does not exist')) {
+          throw new Error('CONFIG_ERROR: La función create_team no existe en Supabase. Ejecuta el SQL y NOTIFY pgrst.');
+        }
+        throw error;
+      }
+
       if (teamId) {
-        // Trigger refetch by clearing lastUserIdRef
         lastUserIdRef.current = null;
-        if (session?.user) fetchUserData(session.user.id);
+        if (session?.user) await fetchUserData(session.user.id);
       }
     } catch (e) {
-      console.error(e);
+      console.error('[Store] createTeam error:', e);
       throw e;
     }
   };
@@ -403,14 +409,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const joinTeam = async (code: string) => {
     if (!state.user) return;
     try {
-      const { data: teamId, error } = await supabase.rpc('join_team', { invite_code_input: code });
-      if (error) throw error;
+      // Fixed argument name: invite_code
+      const { data: teamId, error } = await supabase.rpc('join_team', { invite_code: code });
+
+      if (error) {
+        if (error.code === 'PGRST104' || error.message?.includes('does not exist')) {
+          throw new Error('CONFIG_ERROR: La función join_team no existe en Supabase. Ejecuta el SQL y NOTIFY pgrst.');
+        }
+        throw error;
+      }
+
       if (teamId) {
         lastUserIdRef.current = null;
-        if (session?.user) fetchUserData(session.user.id);
+        if (session?.user) await fetchUserData(session.user.id);
       }
     } catch (e) {
-      console.error(e);
+      console.error('[Store] joinTeam error:', e);
       throw e;
     }
   };
