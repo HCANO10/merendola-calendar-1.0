@@ -52,6 +52,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const fetchUserData = useCallback(async (userId: string) => {
+    // Safety timeout to avoid infinite loading
+    const timeoutId = setTimeout(() => {
+      setAuthLoading(false);
+      console.warn('fetchUserData timed out after 10s');
+    }, 10000);
+
     try {
       // 1. Get Profile
       const { data: profile, error: profileError } = await supabase
@@ -62,11 +68,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error fetching profile:', profileError);
+        setAuthLoading(false);
         return;
       }
 
       // If no profile, we can't do much (it should exist on trigger or be created)
-      if (!profile) return;
+      if (!profile) {
+        console.error('Profile not found for user:', userId);
+        setAuthLoading(false);
+        return;
+      }
 
       const user: User = {
         id: profile.user_id,
@@ -77,6 +88,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         avatar: profile.avatar_url,
         activeTeamId: profile.active_team_id
       };
+
+      // Check for incomplete profile (Required BIRTHDAY and EMAIL)
+      const isProfileIncomplete = !user.birthday || !user.name;
 
       let team = null;
       let teamMembers: User[] = [];
@@ -103,7 +117,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (membersData) {
             teamMembers = membersData.map((m: any) => ({
               id: m.user_id,
-              email: '', // We don't expose emails of others potentially, or fetch from auth if possible (cant select from auth)
+              email: '',
               name: m.profiles.display_name,
               birthday: m.profiles.birthday,
               notificationEmail: m.profiles.notification_email,
@@ -124,7 +138,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           if (snacksData) {
             snacks = snacksData.map((s: any) => {
-              // Map attendees to invites/confirmed
               s.attendees?.forEach((a: any) => {
                 invites.push({
                   id: `att_${s.id}_${a.user_id}`,
@@ -163,6 +176,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     } catch (error) {
       console.error('Error in fetchUserData:', error);
+    } finally {
+      clearTimeout(timeoutId);
+      setAuthLoading(false);
     }
   }, [session]);
 
