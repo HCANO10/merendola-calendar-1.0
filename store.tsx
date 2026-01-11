@@ -4,6 +4,8 @@ import { User, Team, Snack, AppState, Comment, Notification, Invite, RSVPStatus 
 import { supabase } from './supabaseClient';
 import { Session } from '@supabase/supabase-js';
 
+// No loops or 406!
+
 interface StoreContextType {
   state: AppState;
   session: Session | null;
@@ -88,12 +90,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       setState(prev => ({ ...prev, user: initialUser }));
 
-      // 2. Get Profile
-      const { data: profile, error: profileError } = await supabase
+      // 2. Get Profile (Use maybeSingle to avoid 406)
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError) {
         // DETECT MISSING DATABASE / TABLE
@@ -105,17 +107,51 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (isTableMissing) {
           console.error('DATABASE NOT INITIALIZED');
           setDbNotInitialized(true);
-          setDbErrorMessage("La base de datos no está inicializada (falta la tabla profiles). Abre Supabase → SQL Editor y ejecuta docs/supabase.sql. Luego ejecuta: NOTIFY pgrst, 'reload schema';");
+          setDbErrorMessage("La base de datos no está inicializada (falta la tabla profiles).");
           return;
         }
 
-        if (profileError.code !== 'PGRST116') {
-          console.error('Error fetching profile:', profileError);
+        console.error('Error fetching profile:', profileError);
+        setLoadError(true);
+        return;
+      }
+
+      // 3. Auto-create profile if missing (upsert)
+      if (!profile) {
+        console.log('Profile missing, creating auto-profile for:', userId);
+        const { data: newProfile, error: insErr } = await supabase
+          .from('profiles')
+          .upsert(
+            { user_id: userId, notification_email: session?.user?.email, display_name: initialUser.name },
+            { onConflict: 'user_id' }
+          )
+          .select('*')
+          .single();
+
+        if (insErr) {
+          console.error('Error creating auto-profile:', insErr);
           setLoadError(true);
           return;
         }
-        // If profile doesn't exist but table DOES, we continue (maybe user is new)
-        console.warn('Profile record not found, continuing with empty profile');
+        profile = newProfile;
+      }
+
+      let activeTeamId = profile?.active_team_id || null;
+
+      // 4. Fallback Team Selection: If no active_team_id, check memberships
+      if (!activeTeamId) {
+        console.log('No active team, checking memberships for:', userId);
+        const { data: mData } = await supabase
+          .from('memberships')
+          .select('team_id')
+          .eq('user_id', userId)
+          .limit(1);
+
+        if (mData && mData.length > 0) {
+          activeTeamId = mData[0].team_id;
+          console.log('Found team membership, setting as active:', activeTeamId);
+          await supabase.from('profiles').update({ active_team_id: activeTeamId }).eq('user_id', userId);
+        }
       }
 
       const user: User = {
@@ -125,7 +161,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         birthday: profile?.birthday,
         notificationEmail: profile?.notification_email,
         avatar: profile?.avatar_url,
-        activeTeamId: profile?.active_team_id
+        activeTeamId: activeTeamId
       };
 
       let team = null;
@@ -133,12 +169,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       let snacks: Snack[] = [];
       let invites: Invite[] = [];
 
-      // 2. Get Active Team Data
-      if (profile.active_team_id) {
+      // 5. Get Active Team Data
+      if (activeTeamId) {
         const { data: teamData, error: teamError } = await supabase
           .from('teams')
           .select('*')
-          .eq('id', profile.active_team_id)
+          .eq('id', activeTeamId)
           .single();
 
         if (teamError) {
@@ -152,11 +188,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             createdAt: teamData.created_at
           };
 
-          // 3. Get Members
+          // 6. Get Members
           const { data: membersData, error: membersError } = await supabase
             .from('memberships')
             .select('user_id, profiles(display_name, birthday, avatar_url, notification_email, active_team_id)')
-            .eq('team_id', profile.active_team_id);
+            .eq('team_id', activeTeamId);
 
           if (membersError) {
             console.error('Error fetching members:', membersError);
@@ -172,7 +208,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
           }
 
-          // 4. Get Merendolas (RLS filtered)
+          // 7. Get Merendolas (RLS filtered)
           const { data: snacksData, error: snacksError } = await supabase
             .from('merendolas')
             .select(`
@@ -180,7 +216,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               profiles(display_name),
               attendees(user_id, status)
             `)
-            .eq('team_id', profile.active_team_id);
+            .eq('team_id', activeTeamId);
 
           if (snacksError) {
             console.error('Error fetching snacks:', snacksError);
