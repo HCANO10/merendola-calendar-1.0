@@ -25,14 +25,18 @@ const TeamSetup: React.FC = () => {
       // El Trigger de SQL se encargará AUTOMÁTICAMENTE de:
       // a) Crear la membresía de admin.
       // b) Actualizar el active_team_id del perfil.
-      const { error } = await supabase
+      const { data: newTeam, error } = await supabase
         .from('teams')
         .insert([{
           name: teamName.trim(),
           created_by: state.user.id
-        }]);
+        }])
+        .select('*')
+        .single();
 
       if (error) throw error;
+
+      console.log("Equipo creado con código:", newTeam.join_code); // Debug
 
       // 2. REDIRECCIÓN
       // Esperamos un instante (500ms) para asegurar que el Trigger SQL termine
@@ -58,25 +62,27 @@ const TeamSetup: React.FC = () => {
     setError(null);
 
     try {
-      const searchTerm = joinCode.trim(); // Puede ser "TEAM-X9Z1" o "Los Panteras"
+      const input = joinCode.trim();
+      // Intentar buscar:
+      // A) Coincidencia exacta de código
+      // B) O coincidencia de nombre
+      // C) O coincidencia de código asumiendo que falta el prefijo TEAM-
 
-      // 1. BUSCAR EL EQUIPO (Por código exacto O por nombre)
-      const { data: team, error: searchError } = await supabase
+      const { data: team, error } = await supabase
         .from('teams')
         .select('id, name, join_code')
-        .or(`join_code.eq.${searchTerm},name.eq.${searchTerm}`)
-        .maybeSingle(); // Usar maybeSingle para no lanzar error si no encuentra
+        .or(`join_code.eq.${input},name.eq.${input},join_code.eq.TEAM-${input.toUpperCase()}`)
+        .maybeSingle();
 
-      if (searchError) throw searchError;
+      if (error) throw error;
 
       if (!team) {
-        alert("❌ No encontramos ningún equipo con ese código o nombre.");
-        setError("No encontrado. Prueba con el Código exacto.");
+        alert("❌ No encontramos ningún equipo con ese Código o Nombre.");
         setLoading(false);
         return;
       }
 
-      // 2. CREAR MEMBRESÍA
+      // 2. Unirse...
       if (!state.user?.id) throw new Error("No estás logueado.");
 
       const { error: joinError } = await supabase
@@ -88,18 +94,17 @@ const TeamSetup: React.FC = () => {
         }]);
 
       if (joinError) {
-        if (joinError.code === '23505') { // Código duplicado
-          alert(`Ya eres miembro de ${team.name}`);
+        if (joinError.code === '23505') {
+          alert(`¡Ya eres miembro de ${team.name}!`);
         } else {
           throw joinError;
         }
       } else {
         alert(`✅ ¡Te has unido a ${team.name}!`);
+        // Actualizar perfil y entrar
+        await supabase.from('profiles').update({ active_team_id: team.id }).eq('user_id', state.user.id);
+        window.location.href = '/dashboard';
       }
-
-      // 3. ACTUALIZAR PERFIL Y RECARGAR
-      await supabase.from('profiles').update({ active_team_id: team.id }).eq('user_id', state.user.id);
-      window.location.href = '/dashboard';
 
     } catch (err: any) {
       console.error(err);

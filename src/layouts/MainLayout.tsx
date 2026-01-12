@@ -1,72 +1,74 @@
 import React, { useState } from 'react';
-import { Sidebar } from '../components/Sidebar'; // Tu componente Sidebar actual
+import { Sidebar } from '../components/Sidebar'; // Asegúrate de que Sidebar se adapte al contenedor
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
 
     return (
-        // CONTENEDOR FLEX PRINCIPAL (Ocupa toda la pantalla)
-        <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
 
-            {/* 1. OVERLAY MÓVIL (Sombra oscura al abrir menú) - Solo visible en móvil si está abierto */}
-            {isSidebarOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden transition-opacity"
-                    onClick={() => setSidebarOpen(false)}
-                ></div>
-            )}
-
-            {/* 2. SIDEBAR HÍBRIDA */}
-            {/* MÓVIL: 'fixed' (Flota sobre todo), oculta a la izquierda (-translate-x-full).
-          DESKTOP: 'md:relative' (Ocupa espacio real), siempre visible (translate-x-0).
-      */}
-            <aside
-                className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-[#0f172a] text-white transition-transform duration-300 ease-in-out shadow-2xl flex flex-col
-          md:relative md:translate-x-0 md:shadow-none
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
-            >
-                {/* Botón Cerrar (Solo visible en Móvil dentro de la sidebar) */}
-                <div className="md:hidden flex justify-end p-4 border-b border-gray-700">
-                    <button onClick={() => setSidebarOpen(false)} className="text-gray-400 hover:text-white">
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
-
-                {/* Renderizamos el contenido de la Sidebar */}
-                {/* Pasamos mobileClose para que los enlaces cierren el menú en móvil */}
-                <div className="flex-1 overflow-y-auto">
-                    <Sidebar mobileClose={() => setSidebarOpen(false)} />
-                </div>
-            </aside>
-
-            {/* 3. ÁREA DE CONTENIDO (Se ajusta automáticamente al espacio que sobra) */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
-
-                {/* HEADER MÓVIL (Solo visible en pantallas pequeñas) */}
-                <header className="md:hidden bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3 z-30 shadow-sm flex-shrink-0">
-                    <div className="flex items-center gap-2 font-bold text-indigo-900 text-lg">
-                        🍪 Merendola
-                    </div>
+            {/* 1. HEADER GLOBAL (Siempre visible) */}
+            <header className="bg-white border-b border-gray-200 h-16 flex items-center px-4 justify-between shadow-sm z-30 flex-shrink-0">
+                <div className="flex items-center gap-4">
+                    {/* Botón Hamburguesa */}
                     <button
-                        onClick={() => setSidebarOpen(true)}
-                        className="p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                        onClick={() => setSidebarOpen(!isSidebarOpen)}
+                        className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-indigo-600 focus:outline-none transition-colors"
+                        title={isSidebarOpen ? "Cerrar menú" : "Abrir menú"}
                     >
-                        <span className="sr-only">Abrir menú</span>
-                        {/* Icono Hamburguesa */}
-                        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                </header>
 
-                {/* MAIN SCROLLABLE (Donde va el Calendario) */}
-                <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar relative">
-                    {children}
+                    {/* Logo / Título */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl">🍪</span>
+                        <h1 className="font-bold text-gray-800 text-lg tracking-tight">Merendola Calendar</h1>
+                    </div>
+                </div>
+
+                {/* (Opcional) Avatar o Info de usuario a la derecha */}
+                <div className="text-sm font-medium text-gray-500">
+                    {/* Aquí podrías poner el avatar del usuario si quisieras */}
+                </div>
+            </header>
+
+            {/* 2. CUERPO PRINCIPAL (Sidebar + Contenido) */}
+            <div className="flex flex-1 overflow-hidden relative">
+
+                {/* SIDEBAR (Estilo Push) */}
+                <aside
+                    className={`
+            bg-[#0f172a] text-white flex-shrink-0
+            transition-all duration-300 ease-in-out overflow-hidden
+            ${isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'}
+          `}
+                >
+                    {/* Contenedor interno con ancho fijo para evitar deformaciones al cerrar */}
+                    <div className="w-64 h-full flex flex-col border-r border-gray-800">
+                        {/* Pasamos mobileClose aunque aquí no es estrictamente necesario cerrar al clickar, 
+                 pero mantenemos la compatibilidad con el componente Sidebar existente */}
+                        <Sidebar mobileClose={() => window.innerWidth < 768 && setSidebarOpen(false)} />
+                    </div>
+                </aside>
+
+                {/* CONTENIDO PRINCIPAL (Se ajusta al espacio restante) */}
+                <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 relative custom-scrollbar">
+                    {/* Capa de seguridad para móviles: Si está abierto en móvil, oscurecer el fondo para enfocar */}
+                    {isSidebarOpen && (
+                        <div
+                            className="md:hidden absolute inset-0 bg-black/20 z-10 backdrop-blur-[1px]"
+                            onClick={() => setSidebarOpen(false)}
+                        ></div>
+                    )}
+
+                    <div className="max-w-7xl mx-auto h-full">
+                        {children}
+                    </div>
                 </main>
-            </div>
 
+            </div>
         </div>
     );
 };
