@@ -23,18 +23,45 @@ const TeamSetup: React.FC = () => {
     setError(null);
 
     try {
-      const { error } = await supabase
+      // 1. Create Team
+      const { data: teamData, error: createError } = await supabase
         .from('teams')
         .insert([
           {
             name: teamName.trim(),
             created_by: state.user.id
           }
+        ])
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      if (!teamData) throw new Error("No se pudo obtener el ID del nuevo equipo.");
+
+      const newTeamId = teamData.id;
+
+      // 2. Create Admin Membership (Explicit)
+      const { error: memberError } = await supabase
+        .from('memberships')
+        .insert([
+          {
+            team_id: newTeamId,
+            user_id: state.user.id,
+            role: 'admin'
+          }
         ]);
 
-      if (error) throw error;
+      if (memberError) throw memberError;
 
-      // Silk Edition: Show success and wait for triggers
+      // 3. Auto-Switch: Update Profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ active_team_id: newTeamId })
+        .eq('user_id', state.user.id);
+
+      if (profileError) throw profileError;
+
+      // Success
       setIsCreatingSpace(true);
       setToast("¡Equipo creado! Preparando tu entorno...");
 
@@ -147,9 +174,20 @@ const TeamSetup: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 md:p-12 overflow-auto">
       <div className="max-w-4xl mx-auto w-full">
-        <header className="mb-10">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 uppercase italic">Gestión de Equipos</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Crea, únete o administra tus comunidades de merienda.</p>
+        <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 uppercase italic">Gestión de Equipos</h1>
+            <p className="text-slate-500 font-medium tracking-tight">Crea, únete o administra tus comunidades de merienda.</p>
+          </div>
+          {state.teams.length > 0 && (
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+            >
+              <span className="material-symbols-outlined">arrow_back</span>
+              Volver al Dashboard
+            </button>
+          )}
         </header>
 
         <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm mb-12 w-fit">

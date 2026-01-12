@@ -80,7 +80,7 @@ const Dashboard: React.FC = () => {
           event_id,
           user_id: state.user.id,
           status
-        });
+        }, { onConflict: 'event_id, user_id' });
       if (error) throw error;
       setToast(status === 'going' ? "¡Te has apuntado! 🙋‍♂️" : "No asistirás 🙅‍♂️");
       setTimeout(() => setToast(null), 3000);
