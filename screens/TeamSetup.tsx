@@ -18,50 +18,25 @@ const TeamSetup: React.FC = () => {
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamName.trim() || !state.user?.id) return;
-
     setLoading(true);
-    setError(null);
 
     try {
-      // 1. Create Team
-      const { data: teamData, error: createError } = await supabase
+      // 1. CREAR EQUIPO
+      // El Trigger de SQL se encargará AUTOMÁTICAMENTE de:
+      // a) Crear la membresía de admin.
+      // b) Actualizar el active_team_id del perfil.
+      const { error } = await supabase
         .from('teams')
-        .insert([
-          {
-            name: teamName.trim(),
-            created_by: state.user.id
-          }
-        ])
-        .select()
-        .single();
+        .insert([{
+          name: teamName.trim(),
+          created_by: state.user.id
+        }]);
 
-      if (createError) throw createError;
-      if (!teamData) throw new Error("No se pudo obtener el ID del nuevo equipo.");
+      if (error) throw error;
 
-      const newTeamId = teamData.id;
-
-      // 2. Create Admin Membership (Explicit)
-      const { error: memberError } = await supabase
-        .from('memberships')
-        .insert([
-          {
-            team_id: newTeamId,
-            user_id: state.user.id,
-            role: 'admin'
-          }
-        ]);
-
-      if (memberError) throw memberError;
-
-      // 3. Auto-Switch: Update Profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ active_team_id: newTeamId })
-        .eq('user_id', state.user.id);
-
-      if (profileError) throw profileError;
-
-      // Success
+      // 2. REDIRECCIÓN
+      // Esperamos un instante (500ms) para asegurar que el Trigger SQL termine
+      // y luego recargamos para entrar al Dashboard del nuevo equipo.
       setIsCreatingSpace(true);
       setToast("¡Equipo creado! Preparando tu entorno...");
 
@@ -70,9 +45,8 @@ const TeamSetup: React.FC = () => {
       }, 1000);
 
     } catch (err: any) {
-      console.error('Error creating team:', err);
-      alert(err.message || 'Error al crear el equipo');
-      setError(err.message);
+      console.error("Error creating team:", err);
+      alert("Error al crear equipo: " + err.message);
       setLoading(false);
     }
   };

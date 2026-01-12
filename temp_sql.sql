@@ -1,1 +1,3 @@
-ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS start_time timestamp with time zone; ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS end_time timestamp with time zone; ALTER TABLE merendolas ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES profiles(user_id);
+-- FIX: Add missing column causing trigger error
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS notification_email text;
