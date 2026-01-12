@@ -36,6 +36,30 @@ const Dashboard: React.FC = () => {
   // Layout state
   const [toast, setToast] = useState<string | null>(null);
 
+  // 1. AÑADIR ESTADO PARA GUARDAR MIS RESPUESTAS
+  const [myRsvps, setMyRsvps] = useState<Record<string, string>>({});
+
+  // 2. EFECTO PARA CARGAR MIS RESPUESTAS (Al montar o cambiar de equipo)
+  useEffect(() => {
+    if (state.user && state.team) {
+      const fetchRsvps = async () => {
+        const { data } = await supabase
+          .from('event_participants')
+          .select('event_id, status')
+          .eq('user_id', state.user.id);
+
+        if (data) {
+          const rsvpMap: Record<string, string> = {};
+          data.forEach((item: any) => {
+            rsvpMap[item.event_id] = item.status;
+          });
+          setMyRsvps(rsvpMap);
+        }
+      };
+      fetchRsvps();
+    }
+  }, [state.user, state.team, state.events]); // Recargar si cambian eventos
+
   // 1. DATA ADAPTATION
   const rawEvents = Array.isArray(state.events) ? state.events : [];
 
@@ -71,20 +95,34 @@ const Dashboard: React.FC = () => {
     setShowDetailModal(true);
   };
 
-  const handleRSVP = async (event_id: string, status: 'going' | 'not_going') => {
+  const handleRSVP = async (e: React.MouseEvent | undefined, eventId: string, status: 'going' | 'not_going') => {
+    if (e) {
+      e.preventDefault(); // ¡STOP recarga!
+      e.stopPropagation(); // ¡STOP click en la fila!
+    }
     if (!state.user?.id) return;
+
+    // A) Actualización Optimista (Visual inmediata)
+    setMyRsvps(prev => ({ ...prev, [eventId]: status }));
+    setToast(status === 'going' ? "¡Te has apuntado! 🙋‍♂️" : "No asistirás 🙅‍♂️");
+    setTimeout(() => setToast(null), 3000);
+
+    // B) Guardado Real en Base de Datos
     try {
       const { error } = await supabase
         .from('event_participants')
         .upsert({
-          event_id,
+          event_id: eventId,
           user_id: state.user.id,
-          status
+          status: status
         }, { onConflict: 'event_id, user_id' });
-      if (error) throw error;
-      setToast(status === 'going' ? "¡Te has apuntado! 🙋‍♂️" : "No asistirás 🙅‍♂️");
-      setTimeout(() => setToast(null), 3000);
-      fetchUserData(state.user.id); // Refresh data
+
+      if (error) {
+        console.error("Error guardando RSVP:", error);
+        alert("Hubo un error al guardar tu respuesta.");
+      } else {
+        fetchUserData(state.user.id); // Refresh global data silently
+      }
     } catch (err) {
       console.error("Error in RSVP:", err);
     }
@@ -210,62 +248,64 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* MIS INVITACIONES - SECTION */}
+      {/* MIS INVITACIONES - SECTION REPLACEMENT */}
       <div className="mt-8 bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-200 dark:border-slate-800 shadow-xl mb-24">
         <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-wider mb-6 flex items-center gap-2">
           <span className="text-2xl">💌</span> Mis Invitaciones
         </h3>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-black text-gray-400 uppercase tracking-widest">
-                <th className="py-4 px-4">Evento</th>
-                <th className="py-4 px-4">Cuándo</th>
-                <th className="py-4 px-4 hidden md:table-cell">Dónde</th>
-                <th className="py-4 px-4 text-center">Tu Respuesta</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {state.events?.map((ev: any) => (
-                <tr key={ev.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <td className="py-4 px-4">
-                    <p className="font-bold text-gray-900 dark:text-white">{ev.title}</p>
-                    <p className="text-xs text-gray-500 md:hidden">{ev.location || 'Sin ubicación'}</p>
-                  </td>
-                  <td className="py-4 px-4 font-medium text-gray-600 dark:text-gray-300">
-                    {new Date(ev.start_time).toLocaleDateString()} <span className="text-xs text-gray-400 block">{new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </td>
-                  <td className="py-4 px-4 text-gray-600 dark:text-gray-300 hidden md:table-cell">
-                    {ev.location || '-'}
-                  </td>
-                  <td className="py-4 px-4 text-center">
-                    <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-max mx-auto">
-                      <button
-                        onClick={() => handleRSVP(ev.id, 'not_going')}
-                        className="px-3 py-1.5 rounded-md text-xs font-bold uppercase transition-all hover:bg-white hover:text-red-500 hover:shadow-sm text-gray-400"
-                      >
-                        No
-                      </button>
-                      <button
-                        onClick={() => handleRSVP(ev.id, 'going')}
-                        className="px-3 py-1.5 rounded-md text-xs font-bold uppercase transition-all bg-white text-emerald-600 shadow-sm"
-                      >
-                        Si Voy
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {(!state.events || state.events.length === 0) && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-gray-400 text-sm font-medium italic">
-                    No tienes invitaciones pendientes
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          {(!state.events || state.events.length === 0) ? (
+            <p className="p-6 text-center text-gray-400 text-sm font-medium italic">No hay eventos próximos.</p>
+          ) : (
+            state.events.map((event: any) => {
+              const myStatus = myRsvps[event.id] || 'pending'; // Estado actual
+
+              return (
+                <div key={event.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded-xl">
+
+                  {/* Info Evento */}
+                  <div>
+                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">{event.title}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2">
+                      <span>📅 {new Date(event.start_time).toLocaleString()}</span>
+                      <span className="hidden md:inline">|</span>
+                      <span>📍 {event.location || 'Sin ubicación'}</span>
+                    </p>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="flex items-center gap-3">
+
+                    {/* Botón ASISTIRÉ */}
+                    <button
+                      onClick={(e) => handleRSVP(e, event.id, 'going')}
+                      className={`px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wide transition-all flex items-center gap-2 shadow-sm
+                            ${myStatus === 'going'
+                          ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          : 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 hover:text-emerald-600'
+                        }`}
+                    >
+                      {myStatus === 'going' && <span>✓</span>} Asistiré
+                    </button>
+
+                    {/* Botón NO IRÉ */}
+                    <button
+                      onClick={(e) => handleRSVP(e, event.id, 'not_going')}
+                      className={`px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wide transition-all flex items-center gap-2 shadow-sm
+                            ${myStatus === 'not_going'
+                          ? 'bg-red-100 text-red-700 ring-2 ring-red-500 dark:bg-red-900/30 dark:text-red-400'
+                          : 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-600'
+                        }`}
+                    >
+                      {myStatus === 'not_going' && <span>✕</span>} No iré
+                    </button>
+
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -334,13 +374,13 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="flex gap-4">
                     <button
-                      onClick={() => { handleRSVP(selectedEvent.resource.id, 'not_going'); setShowDetailModal(false); }}
+                      onClick={() => { handleRSVP(undefined, selectedEvent.resource.id, 'not_going'); setShowDetailModal(false); }}
                       className="flex-1 h-14 rounded-xl font-black uppercase text-[10px] tracking-widest text-slate-400 border border-slate-100 hover:bg-slate-50 transition-all"
                     >
                       No voy 🙅‍♂️
                     </button>
                     <button
-                      onClick={() => { handleRSVP(selectedEvent.resource.id, 'going'); setShowDetailModal(false); }}
+                      onClick={() => { handleRSVP(undefined, selectedEvent.resource.id, 'going'); setShowDetailModal(false); }}
                       className="flex-[2] bg-primary text-white h-14 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all"
                     >
                       Me apunto 🙋‍♂️
