@@ -118,59 +118,64 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Team Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-8 mb-10 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-8 relative overflow-hidden group">
-        <div className="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all duration-700"></div>
-        <div className="flex items-center gap-6 relative z-10">
-          <TeamSwitcher />
-          <button
-            onClick={() => {
-              setSelectedSlot(null);
-              setShowCreateModal(true);
-            }}
-            className="hidden md:flex bg-primary text-white h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all items-center gap-3 border-2 border-primary/20"
-          >
-            <span className="material-symbols-outlined text-lg font-black">add_circle</span>
-            Crear Merienda
-          </button>
-          <div className="h-16 w-px bg-slate-100 dark:bg-slate-800 hidden lg:block mx-2"></div>
-          <div>
-            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 font-display">Estás en</h2>
-            <p className="text-4xl font-black text-slate-900 dark:text-white leading-none tracking-tighter uppercase italic">{state.team?.name}</p>
+      {/* Team Header REPLACEMENT */}
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-50">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              Equipo Actual
+            </label>
+            <div className="relative">
+              <select
+                value={state.team?.id || ''}
+                onChange={(e) => {
+                  const newTeamId = e.target.value;
+                  if (!newTeamId || !state.user?.id) return;
+                  const updateTeam = async () => {
+                    await supabase.from('profiles').update({ active_team_id: newTeamId }).eq('user_id', state.user!.id);
+                    window.location.reload();
+                  };
+                  updateTeam();
+                }}
+                className="appearance-none w-full bg-white border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium text-lg min-w-[200px]"
+              >
+                {state.teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
           </div>
+
+          {state.team?.join_code && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(state.team?.join_code || '');
+                setToast("Código copiado: " + state.team?.join_code);
+                setTimeout(() => setToast(null), 3000);
+              }}
+              className="mt-5 p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+              title="Copiar código de invitación"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-6 relative z-10">
-          {state.team?.join_code ? (
-            <div className="bg-primary/5 dark:bg-primary/10 border-2 border-primary/20 rounded-[2.5rem] p-6 flex flex-col md:flex-row items-center gap-6 shadow-xl shadow-primary/5 group/code transition-all hover:border-primary/40">
-              <div className="text-center md:text-left">
-                <h3 className="text-sm font-black text-primary uppercase tracking-widest mb-1">Invita a tu equipo</h3>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Comparte este código para unirse</p>
-              </div>
-              <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl border border-primary/10 shadow-inner">
-                <code className="px-4 py-2 font-mono text-2xl font-black text-primary tracking-[0.2em]">
-                  {state.team.join_code}
-                </code>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(state.team?.join_code || '');
-                    setToast("¡Código copiado! Compártelo con tu equipo.");
-                    setTimeout(() => setToast(null), 3000);
-                  }}
-                  className="h-12 px-6 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-sm font-black">content_copy</span>
-                  Copiar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] p-6 flex items-center gap-4 animate-pulse">
-              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Cargando código...</span>
-            </div>
-          )}
-          <NotificationBell />
-        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium shadow-md transition-all flex items-center gap-2"
+        >
+          <span>🍩</span> Crear Merienda
+        </button>
       </div>
 
       {/* Calendar Area */}
@@ -203,6 +208,65 @@ const Dashboard: React.FC = () => {
             }
           })}
         />
+      </div>
+
+      {/* MIS INVITACIONES - SECTION */}
+      <div className="mt-8 bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-200 dark:border-slate-800 shadow-xl mb-24">
+        <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+          <span className="text-2xl">💌</span> Mis Invitaciones
+        </h3>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-gray-800 text-xs font-black text-gray-400 uppercase tracking-widest">
+                <th className="py-4 px-4">Evento</th>
+                <th className="py-4 px-4">Cuándo</th>
+                <th className="py-4 px-4 hidden md:table-cell">Dónde</th>
+                <th className="py-4 px-4 text-center">Tu Respuesta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {state.events?.map((ev: any) => (
+                <tr key={ev.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <td className="py-4 px-4">
+                    <p className="font-bold text-gray-900 dark:text-white">{ev.title}</p>
+                    <p className="text-xs text-gray-500 md:hidden">{ev.location || 'Sin ubicación'}</p>
+                  </td>
+                  <td className="py-4 px-4 font-medium text-gray-600 dark:text-gray-300">
+                    {new Date(ev.start_time).toLocaleDateString()} <span className="text-xs text-gray-400 block">{new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </td>
+                  <td className="py-4 px-4 text-gray-600 dark:text-gray-300 hidden md:table-cell">
+                    {ev.location || '-'}
+                  </td>
+                  <td className="py-4 px-4 text-center">
+                    <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-max mx-auto">
+                      <button
+                        onClick={() => handleRSVP(ev.id, 'not_going')}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold uppercase transition-all hover:bg-white hover:text-red-500 hover:shadow-sm text-gray-400"
+                      >
+                        No
+                      </button>
+                      <button
+                        onClick={() => handleRSVP(ev.id, 'going')}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold uppercase transition-all bg-white text-emerald-600 shadow-sm"
+                      >
+                        Si Voy
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {(!state.events || state.events.length === 0) && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-gray-400 text-sm font-medium italic">
+                    No tienes invitaciones pendientes
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* FLOATING ACTION BUTTON (MOBILE) */}
