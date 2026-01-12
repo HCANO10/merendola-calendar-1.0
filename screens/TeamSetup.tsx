@@ -21,36 +21,48 @@ const TeamSetup: React.FC = () => {
     setLoading(true);
 
     try {
-      // 1. CREAR EQUIPO
-      // El Trigger de SQL se encargará AUTOMÁTICAMENTE de:
-      // a) Crear la membresía de admin.
-      // b) Actualizar el active_team_id del perfil.
-      const { data: newTeam, error } = await supabase
+      // 1. GENERACIÓN CLIENT-SIDE (Instantánea)
+      // Crea un código tipo "TEAM-X9Z1"
+      const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const clientGeneratedCode = `TEAM-${randomSuffix}`;
+
+      console.log("Generando equipo con código:", clientGeneratedCode);
+
+      // 2. INSERTAR CON EL CÓDIGO YA PUESTO
+      const { data, error } = await supabase
         .from('teams')
-        .insert([{
-          name: teamName.trim(),
-          created_by: state.user.id
-        }])
-        .select('*')
+        .insert([
+          {
+            name: teamName.trim(),
+            created_by: state.user.id,
+            join_code: clientGeneratedCode
+          }
+        ])
+        .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Si por mala suerte el código ya existe (error 23505), lo reintentamos recursivamente o pedimos al usuario probar de nuevo
+        if (error.code === '23505') {
+          alert("Hubo una colisión cósmica de códigos. Por favor, intenta crear el equipo de nuevo.");
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
-      console.log("Equipo creado con código:", newTeam.join_code); // Debug
+      // 3. ÉXITO
+      // Como nosotros generamos el código, ya sabemos cuál es, no dependemos del return de DB
+      alert(`Equipo creado: ${teamName}\nCódigo: ${clientGeneratedCode}`);
 
-      // 2. REDIRECCIÓN
-      // Esperamos un instante (500ms) para asegurar que el Trigger SQL termine
-      // y luego recargamos para entrar al Dashboard del nuevo equipo.
-      setIsCreatingSpace(true);
-      setToast("¡Equipo creado! Preparando tu entorno...");
+      // Forzar actualización del perfil al nuevo equipo
+      await supabase.from('profiles').update({ active_team_id: data.id }).eq('user_id', state.user.id);
 
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1000);
+      window.location.href = '/dashboard';
 
     } catch (err: any) {
-      console.error("Error creating team:", err);
-      alert("Error al crear equipo: " + err.message);
+      console.error(err);
+      alert("Error creando equipo: " + err.message);
       setLoading(false);
     }
   };

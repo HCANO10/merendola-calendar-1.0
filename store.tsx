@@ -270,12 +270,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             teamMembers = [];
           }
 
-          // 7b. Get Events (SIMPLIFIED)
           try {
             console.log('[Store] [fetchUserData] step=events');
             const { data: eData, error: eErr } = await supabase
               .from('events')
-              .select('*')
+              .select(`
+                *,
+                profiles:created_by ( full_name ), 
+                event_participants (
+                  status,
+                  user_id,
+                  profiles ( full_name, email )
+                )
+              `)
               .eq('team_id', activeTeamId)
               .order('start_time', { ascending: true });
 
@@ -291,11 +298,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 time: s.start_time ? s.start_time.split('T')[1].substring(0, 5) : '',
                 description: s.description,
                 location: s.location,
-                userName: 'Compañero', // Simplificado
-                confirmedUserIds: [],
+                userName: s.profiles?.full_name || 'Compañero',
+                confirmedUserIds: [], // Legacy
                 comments: [],
                 start_time: s.start_time,
-                end_time: s.end_time
+                end_time: s.end_time,
+                profiles: s.profiles,
+                event_participants: s.event_participants || []
               }));
             }
 
@@ -392,8 +401,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
+
+      // 1. CASO ESPECIAL: RECUPERACIÓN DE CONTRASEÑA
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log("🔑 Modo Recuperación Detectado");
+        // Forzar redirección a la pantalla de cambio de clave
+        window.location.hash = '/reset-password';
+        return;
+      }
+
       setSession(newSession);
       if (newSession?.user) {
         fetchUserData(newSession.user.id);

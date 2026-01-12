@@ -1,72 +1,75 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { supabase } from '../../supabaseClient';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
-interface SidebarProps {
-    mobileClose: () => void;
+interface Props {
+    mobileClose?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ mobileClose }) => {
+export const Sidebar = ({ mobileClose }: Props) => {
+    const navigate = useNavigate();
+
     const handleLogout = async () => {
-        try {
-            await supabase.auth.signOut();
-        } catch (error) {
-            console.error("Error signing out:", error);
-        } finally {
-            localStorage.clear();
-            window.location.href = '/';
-        }
+        await supabase.auth.signOut();
+        navigate('/');
     };
 
-    const navLinks = [
-        { name: 'Dashboard', path: '/dashboard', icon: 'dashboard' },
-        { name: 'Mi Perfil', path: '/profile', icon: 'account_circle' },
-        { name: 'Mi Equipo', path: '/team-setup', icon: 'group' },
+    // Función para cerrar menú en móvil al hacer click
+    const handleLinkClick = () => {
+        if (mobileClose) mobileClose();
+    };
+
+    const navItems = [
+        {
+            name: 'Dashboard',
+            path: '/dashboard',
+            icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z'
+        },
+        {
+            name: 'Mi Equipo',
+            path: '/team-setup',
+            icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z'
+        },
+        {
+            name: 'Perfil',
+            path: '/profile',
+            icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'
+        }
     ];
 
     return (
-        <div className="flex flex-col min-h-full p-4">
-            {/* Logo Section */}
-            <div className="mb-8 px-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
-                        <span className="material-symbols-outlined text-2xl">cookie</span>
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight text-white">Merendola</h1>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">Calendar</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation Links */}
-            <nav className="space-y-1 flex-1">
-                {navLinks.map((link) => (
+        <div className="flex flex-col h-full p-4">
+            <nav className="space-y-2 flex-1">
+                {navItems.map((item) => (
                     <NavLink
-                        key={link.path}
-                        to={link.path}
-                        onClick={mobileClose}
-                        className={({ isActive }) =>
-                            `flex items-center gap-4 px-4 py-3 rounded-xl font-bold transition-all ${isActive
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
-                            }`
-                        }
+                        key={item.path}
+                        to={item.path}
+                        onClick={handleLinkClick}
+                        className={({ isActive }) => `
+              flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200
+              ${isActive
+                                ? 'bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-900/50'
+                                : 'text-gray-300 hover:text-white hover:bg-white/10'
+                            }
+            `}
                     >
-                        <span className="material-symbols-outlined">{link.icon}</span>
-                        <span className="text-sm">{link.name}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+                            <path d={item.icon} />
+                        </svg>
+                        <span className="tracking-wide">{item.name}</span>
                     </NavLink>
                 ))}
             </nav>
 
-            {/* Logout Button */}
-            <div className="mt-8 pt-4 border-t border-slate-800">
+            <div className="pt-4 border-t border-gray-800">
                 <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-4 px-4 py-3 text-red-400 font-bold rounded-xl hover:bg-red-400/10 transition-all group"
+                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-gray-400 hover:text-white hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
                 >
-                    <span className="material-symbols-outlined transition-transform group-hover:rotate-12">logout</span>
-                    <span className="text-sm">Cerrar Sesión</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span className="font-medium">Cerrar Sesión</span>
                 </button>
             </div>
         </div>

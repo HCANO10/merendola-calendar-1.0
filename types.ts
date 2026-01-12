@@ -64,6 +64,16 @@ export interface AppEvent {
   comments: Comment[];
   start_time: string;
   end_time: string;
+  // Expanded Data
+  profiles?: { full_name: string };
+  event_participants?: {
+    status: RSVPStatus;
+    user_id: string;
+    profiles: {
+      full_name: string;
+      email: string;
+    };
+  }[];
 }
 
 

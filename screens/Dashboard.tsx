@@ -10,6 +10,7 @@ import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';
 import { NotificationBell } from '../src/components/NotificationBell';
 import { CreateEventModal } from '../src/components/CreateEventModal';
+import { EventDetailsModal } from '../src/components/EventDetailsModal';
 import { sendEventInvitation } from '../src/utils/emailService';
 
 const locales = {
@@ -29,7 +30,6 @@ const Dashboard: React.FC = () => {
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotInfo | null>(null);
 
@@ -151,8 +151,9 @@ const Dashboard: React.FC = () => {
   };
 
   const handleSelectEvent = (event: any) => {
-    setSelectedEvent(event);
-    setShowDetailModal(true);
+    // IMPORTANTE: Pasamos event.resource que tiene TODA la data extendida (profiles, participants)
+    // El objeto 'event' del calendario es solo un wrapper visual con start/end dates
+    setSelectedEvent(event.resource);
   };
 
   const handleRSVP = async (e: React.MouseEvent | undefined, eventId: string, status: 'going' | 'not_going') => {
@@ -473,63 +474,26 @@ const Dashboard: React.FC = () => {
       />
 
       {/* DETAIL MODAL */}
-      {showDetailModal && selectedEvent && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => setShowDetailModal(false)}></div>
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] p-10 relative z-10 shadow-2xl border border-slate-100 dark:border-slate-800">
-            {selectedEvent.resource?.type === 'birthday' ? (
-              <div className="flex flex-col items-center text-center">
-                <div className="w-24 h-24 bg-amber-50 dark:bg-amber-900/10 text-amber-500 rounded-full flex items-center justify-center mb-8"><span className="material-symbols-outlined text-5xl">cake</span></div>
-                <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic mb-2">¡Cumpleaños!</h2>
-                <p className="text-xl font-bold text-slate-500 mb-10">Es el día de {selectedEvent.resource.user.name}</p>
-                <button onClick={() => setShowDetailModal(false)} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-950 h-16 rounded-2xl font-black uppercase tracking-widest">¡Genial!</button>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-primary/10 text-primary rounded-2xl flex items-center justify-center"><span className="material-symbols-outlined text-3xl">restaurant</span></div>
-                  <div>
-                    <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic leading-none">{selectedEvent.title}</h2>
-                    <p className="text-slate-500 font-bold mt-1 uppercase text-[10px] tracking-widest">{format(selectedEvent.start, "EEEE, d 'de' MMMM", { locale: es })}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Hora</p>
-                    <p className="font-bold text-lg text-slate-900 dark:text-white">{format(selectedEvent.start, 'HH:mm')} - {format(selectedEvent.end, 'HH:mm')}</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Lugar</p>
-                    <p className="font-bold text-lg text-slate-900 dark:text-white">{selectedEvent.resource?.location || 'Por definir'}</p>
-                  </div>
-                </div>
-                <div className="pt-4 flex flex-col gap-4">
-                  <div className="flex items-center justify-between px-4 py-2">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Organizado por</span>
-                    <span className="text-sm font-black text-primary">{selectedEvent.resource?.userName || 'Un compañero'}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => { handleRSVP(undefined, selectedEvent.resource.id, 'not_going'); setShowDetailModal(false); }}
-                      className="flex-1 h-14 rounded-xl font-black uppercase text-[10px] tracking-widest text-slate-400 border border-slate-100 hover:bg-slate-50 transition-all"
-                    >
-                      No voy 🙅‍♂️
-                    </button>
-                    <button
-                      onClick={() => { handleRSVP(undefined, selectedEvent.resource.id, 'going'); setShowDetailModal(false); }}
-                      className="flex-[2] bg-primary text-white h-14 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all"
-                    >
-                      Me apunto 🙋‍♂️
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {selectedEvent && (
+        <EventDetailsModal
+          isOpen={!!selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          event={selectedEvent}
+          currentUserId={state.user?.id || ''}
+          onDelete={async (id) => {
+            await handleDeleteEvent(id); // La confirmación ya está dentro de handleDeleteEvent
+            setSelectedEvent(null);
+          }}
+          onRSVP={async (id, status) => {
+            await handleRSVP(undefined, id, status as 'going' | 'not_going');
+            if (state.user?.id) fetchUserData(state.user.id); // Recargar para ver mi nombre en la lista
+            // Opcional: setSelectedEvent(null); // Si quieres cerrar
+          }}
+        />
       )}
     </div>
   );
 };
+
 
 export default Dashboard;

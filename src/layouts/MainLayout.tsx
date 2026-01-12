@@ -1,71 +1,62 @@
 import React, { useState } from 'react';
-import { Sidebar } from '../components/Sidebar'; // Asegúrate de que Sidebar se adapte al contenedor
+import { Sidebar } from '../components/Sidebar';
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
+    // Estado del menú: Por defecto CERRADO en móvil, ABIERTO en escritorio
+    // (O puedes poner 'false' para que empiece siempre cerrado)
+    const [isOpen, setIsOpen] = useState(window.innerWidth > 768);
 
     return (
-        <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+        <div className="flex flex-col h-screen bg-gray-50">
 
-            {/* 1. HEADER GLOBAL (Siempre visible) */}
-            <header className="bg-white border-b border-gray-200 h-16 flex items-center px-4 justify-between shadow-sm z-30 flex-shrink-0">
+            {/* 1. HEADER (Siempre fijo arriba) */}
+            <header className="bg-white h-16 border-b border-gray-200 flex items-center px-4 justify-between flex-shrink-0 z-20">
                 <div className="flex items-center gap-4">
-                    {/* Botón Hamburguesa */}
+                    {/* EL BOTÓN QUE ABRE Y CIERRA */}
                     <button
-                        onClick={() => setSidebarOpen(!isSidebarOpen)}
-                        className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-indigo-600 focus:outline-none transition-colors"
-                        title={isSidebarOpen ? "Cerrar menú" : "Abrir menú"}
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="p-2 rounded-md hover:bg-gray-100 text-gray-700 transition-colors"
                     >
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {/* Icono Hamburguesa */}
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
 
-                    {/* Logo / Título */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-2xl">🍪</span>
-                        <h1 className="font-bold text-gray-800 text-lg tracking-tight">Merendola Calendar</h1>
-                    </div>
-                </div>
-
-                {/* (Opcional) Avatar o Info de usuario a la derecha */}
-                <div className="text-sm font-medium text-gray-500">
-                    {/* Aquí podrías poner el avatar del usuario si quisieras */}
+                    <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        🍪 Merendola
+                    </h1>
                 </div>
             </header>
 
-            {/* 2. CUERPO PRINCIPAL (Sidebar + Contenido) */}
+            {/* 2. CONTENEDOR FLEX (Cuerpo) */}
             <div className="flex flex-1 overflow-hidden relative">
 
-                {/* SIDEBAR (Estilo Push) */}
+                {/* SIDEBAR DESLIZANTE */}
+                {/* La magia está en la clase de ancho: w-64 vs w-0 */}
                 <aside
                     className={`
-            bg-[#0f172a] text-white flex-shrink-0
-            transition-all duration-300 ease-in-out overflow-hidden
-            ${isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'}
+            bg-[#0f172a] text-white
+            transition-all duration-300 ease-in-out
+            ${isOpen ? 'w-64' : 'w-0'}
+            overflow-hidden flex-shrink-0
           `}
                 >
-                    {/* Contenedor interno con ancho fijo para evitar deformaciones al cerrar */}
-                    <div className="w-64 h-full flex flex-col border-r border-gray-800">
-                        {/* Pasamos mobileClose aunque aquí no es estrictamente necesario cerrar al clickar, 
-                 pero mantenemos la compatibilidad con el componente Sidebar existente */}
-                        <Sidebar mobileClose={() => window.innerWidth < 768 && setSidebarOpen(false)} />
+                    {/* Contenedor interno de ancho fijo para que el texto no se deforme al cerrar */}
+                    <div className="w-64 h-full flex flex-col">
+                        <Sidebar mobileClose={() => {
+                            // Si estamos en móvil, cerramos al hacer click en un link
+                            if (window.innerWidth < 768) setIsOpen(false);
+                        }} />
                     </div>
                 </aside>
 
-                {/* CONTENIDO PRINCIPAL (Se ajusta al espacio restante) */}
-                <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 relative custom-scrollbar">
-                    {/* Capa de seguridad para móviles: Si está abierto en móvil, oscurecer el fondo para enfocar */}
-                    {isSidebarOpen && (
-                        <div
-                            className="md:hidden absolute inset-0 bg-black/20 z-10 backdrop-blur-[1px]"
-                            onClick={() => setSidebarOpen(false)}
-                        ></div>
-                    )}
-
-                    <div className="max-w-7xl mx-auto h-full">
-                        {children}
-                    </div>
+                {/* CONTENIDO PRINCIPAL */}
+                <main className="flex-1 overflow-y-auto bg-gray-50 p-4 relative w-full">
+                    {/* Overlay opcional para oscurecer en móvil si quieres, 
+               pero con el sistema Push no es estrictamente necesario. 
+               Lo dejamos limpio. */}
+                    {children}
                 </main>
 
             </div>
