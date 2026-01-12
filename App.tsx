@@ -5,7 +5,8 @@ import SignIn from './screens/SignIn';
 import TeamSetup from './screens/TeamSetup';
 import Profile from './screens/Profile';
 import Dashboard from './screens/Dashboard';
-import MainLayout from './src/layouts/MainLayout';
+import { ResetPassword } from './src/screens/ResetPassword';
+import { MainLayout } from './src/layouts/MainLayout';
 import { RequireProfile, RequireTeam } from './src/components/Guards';
 
 /**
@@ -31,7 +32,7 @@ const AppRoutes: React.FC = () => {
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={!session ? <SignIn /> : <Navigate to="/dashboard" replace />} />
-      <Route path="/reset-password" element={<SignIn />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Protected Routes (Require Session) */}
       <Route element={session ? <MainLayout><Outlet /></MainLayout> : <Navigate to="/" state={{ from: location }} replace />}>
