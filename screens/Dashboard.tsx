@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, dateFnsLocalizer, SlotInfo } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer, SlotInfo, Views, View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -8,7 +8,7 @@ import { supabase } from '../supabaseClient';
 import { useStore } from '../store';
 import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';
-import NotificationBell from '../src/components/NotificationBell';
+import { NotificationBell } from '../src/components/NotificationBell';
 import { CreateEventModal } from '../src/components/CreateEventModal';
 import { sendEventInvitation } from '../src/utils/emailService';
 
@@ -32,6 +32,21 @@ const Dashboard: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotInfo | null>(null);
+
+  // Responsive View State
+  const [view, setView] = useState<View>(window.innerWidth < 768 ? Views.AGENDA : Views.MONTH);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768 && view !== Views.AGENDA && view !== Views.DAY) {
+        setView(Views.AGENDA);
+      } else if (window.innerWidth >= 768 && view === Views.AGENDA) {
+        setView(Views.MONTH);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [view]);
 
   // Layout state
   const [toast, setToast] = useState<string | null>(null);
@@ -59,6 +74,51 @@ const Dashboard: React.FC = () => {
       fetchRsvps();
     }
   }, [state.user, state.team, state.events]); // Recargar si cambian eventos
+
+  // EFECTO: AUTO-RSVP DESDE EMAIL
+  useEffect(() => {
+    const handleAutoRSVP = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      const eventId = params.get('eventId');
+      const status = params.get('status');
+
+      // Solo actuar si vienen todos los datos y el usuario está logueado
+      if (action === 'rsvp' && eventId && status && state.user) {
+        console.log("🔗 Detectado RSVP desde Email:", { eventId, status });
+
+        // 1. Guardar en Supabase
+        const { error } = await supabase
+          .from('event_participants')
+          .upsert({
+            event_id: eventId,
+            user_id: state.user.id,
+            status: status
+          }, { onConflict: 'event_id, user_id' });
+
+        if (!error) {
+          // 2. Feedback visual
+          alert(status === 'going' ? "✅ ¡Confirmado! Nos vemos en la merienda." : "❌ Entendido, te echaremos de menos.");
+
+          // 3. Actualizar UI localmente
+          setMyRsvps(prev => ({ ...prev, [eventId]: status }));
+
+          // 4. Limpiar URL (Quitar lo feo de la barra de direcciones)
+          const newUrl = window.location.pathname;
+          // @ts-ignore
+          window.history.replaceState({}, '', newUrl);
+        } else {
+          console.error("Error Auto-RSVP:", error);
+        }
+      }
+    };
+
+    // Ejecutar si hay usuario (si no, el usuario hará login y al volver a Dashboard debería ejecutarse si persisten params, 
+    // o si redirige auth, habría que manejarlo, pero para MVP asumimos sesión activa o redirect simple).
+    if (state.user) {
+      handleAutoRSVP();
+    }
+  }, [state.user]); // Dependencia: user (para ejecutar en cuanto cargue la sesión)
 
   // 1. DATA ADAPTATION
   const rawEvents = Array.isArray(state.events) ? state.events : [];
@@ -128,6 +188,20 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!window.confirm("¿Seguro que quieres cancelar este evento? Se borrará para todos.")) return;
+
+    // 1. Borrar de Supabase
+    const { error } = await supabase.from('events').delete().eq('id', eventId);
+
+    if (error) {
+      alert("Error al borrar: " + error.message);
+    } else {
+      // 2. Actualizar estado local (Reload simple)
+      window.location.reload();
+    }
+  };
+
   const birthdayEvents = (state.teamMembers || [])
     .filter(member => member.birthday)
     .map(member => {
@@ -191,43 +265,94 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {state.team?.join_code && (
+          {/* COMPONENTE VISUAL DE CÓDIGO DE EQUIPO */}
+          <div className="mt-2 inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg">
+            <span className="text-xs text-indigo-600 font-bold uppercase tracking-wider">Código de Invitación:</span>
+            <code className="text-sm font-mono font-bold text-indigo-800 tracking-wide">
+              {state.team?.join_code || 'Generando...'}
+            </code>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(state.team?.join_code || '');
-                setToast("Código copiado: " + state.team?.join_code);
-                setTimeout(() => setToast(null), 3000);
+                if (state.team?.join_code) {
+                  navigator.clipboard.writeText(state.team.join_code);
+                  alert("✅ Código copiado: " + state.team.join_code);
+                }
               }}
-              className="mt-5 p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
-              title="Copiar código de invitación"
+              className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors"
+              title="Copiar código"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              {/* Icono Copiar */}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
               </svg>
             </button>
-          )}
+          </div>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium shadow-md transition-all flex items-center gap-2"
-        >
-          <span>🍩</span> Crear Merienda
-        </button>
+        <div className="flex items-center gap-4">
+          {/* CAMPANA DE NOTIFICACIONES */}
+          {state.user?.id && <NotificationBell userId={state.user.id} />}
+
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium shadow-md transition-all flex items-center gap-2"
+          >
+            <span>🍩</span> Crear Merienda
+          </button>
+        </div>
       </div>
 
       {/* Calendar Area */}
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[3rem] p-8 border border-slate-200 dark:border-slate-800 shadow-2xl min-h-[700px] relative">
+      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[3rem] p-4 md:p-8 border border-slate-200 dark:border-slate-800 shadow-2xl min-h-[500px] md:min-h-[700px] relative overflow-hidden">
+        <style>{`
+          .rbc-toolbar { flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; }
+          .rbc-toolbar-label { width: 100%; text-align: center; font-weight: 800; font-size: 1.2rem; order: -1; margin-bottom: 10px; }
+          
+          @media (min-width: 768px) {
+             .rbc-toolbar-label { width: auto; order: 0; margin-bottom: 0; }
+          }
+
+          /* MOVILE SPECIFIC FIXES (REQUESTED) */
+          @media (max-width: 768px) {
+            .rbc-toolbar {
+              flex-direction: column;
+              gap: 10px;
+              font-size: 12px;
+            }
+            .rbc-toolbar-label {
+              margin: 5px 0;
+              font-weight: bold;
+              font-size: 16px;
+            }
+          }
+        `}</style>
         <Calendar
           localizer={localizer}
+          culture='es' // <--- CRÍTICO: Activa el formato de fecha español
           events={allEvents}
           startAccessor="start"
           endAccessor="end"
-          style={{ height: '100%', borderRadius: '1.5rem' }}
+          view={view}
+          onView={setView}
+          style={{ height: 'calc(100vh - 200px)', borderRadius: '1.5rem', fontFamily: 'inherit' }}
           messages={{
-            next: "Siguiente", previous: "Anterior", today: "Hoy",
-            month: "Mes", week: "Semana", day: "Día",
-            agenda: "Agenda", date: "Fecha", time: "Hora", event: "Evento"
+            allDay: 'Todo el día',
+            previous: 'Anterior',
+            next: 'Siguiente',
+            today: 'Hoy',
+            month: 'Mes',
+            week: 'Semana',
+            day: 'Día',
+            agenda: 'Agenda',
+            date: 'Fecha',
+            time: 'Hora',
+            event: 'Evento',
+            noEventsInRange: 'Sin meriendas en este rango.',
+            showMore: total => `+ Ver más (${total})`
+          }}
+          formats={{
+            dayHeaderFormat: (date: Date) => format(date, 'EEEE d MMMM', { locale: es }),
+            monthHeaderFormat: (date: Date) => format(date, 'MMMM yyyy', { locale: es })
           }}
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
@@ -266,7 +391,18 @@ const Dashboard: React.FC = () => {
 
                   {/* Info Evento */}
                   <div>
-                    <h4 className="font-bold text-gray-900 dark:text-white text-lg">{event.title}</h4>
+                    <h4 className="font-bold text-gray-900 dark:text-white text-lg flex items-center gap-2">
+                      {event.title}
+                      {state.user?.id === event.created_by && (
+                        <button
+                          onClick={() => handleDeleteEvent(event.id)}
+                          className="ml-2 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50"
+                          title="Borrar evento"
+                        >
+                          <span className="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                      )}
+                    </h4>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2">
                       <span>📅 {new Date(event.start_time).toLocaleString()}</span>
                       <span className="hidden md:inline">|</span>

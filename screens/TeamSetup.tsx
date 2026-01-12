@@ -54,29 +54,31 @@ const TeamSetup: React.FC = () => {
   const handleJoinTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!joinCode.trim()) return;
-    if (!state.user?.id) return;
-
     setLoading(true);
     setError(null);
 
     try {
-      // 1. BUSCAR EL EQUIPO POR CÓDIGO
-      // Importante: .maybeSingle() para no dar error 406 si no existe, devuelve null
+      const searchTerm = joinCode.trim(); // Puede ser "TEAM-X9Z1" o "Los Panteras"
+
+      // 1. BUSCAR EL EQUIPO (Por código exacto O por nombre)
       const { data: team, error: searchError } = await supabase
         .from('teams')
-        .select('id, name')
-        .eq('join_code', joinCode.trim().toUpperCase()) // trim() y upper para asegurar match
-        .maybeSingle();
+        .select('id, name, join_code')
+        .or(`join_code.eq.${searchTerm},name.eq.${searchTerm}`)
+        .maybeSingle(); // Usar maybeSingle para no lanzar error si no encuentra
 
       if (searchError) throw searchError;
+
       if (!team) {
-        alert("❌ Código no válido. No se encontró ningún equipo.");
-        setError("Código no válido. Verifícalo.");
+        alert("❌ No encontramos ningún equipo con ese código o nombre.");
+        setError("No encontrado. Prueba con el Código exacto.");
         setLoading(false);
         return;
       }
 
       // 2. CREAR MEMBRESÍA
+      if (!state.user?.id) throw new Error("No estás logueado.");
+
       const { error: joinError } = await supabase
         .from('memberships')
         .insert([{
@@ -85,38 +87,23 @@ const TeamSetup: React.FC = () => {
           role: 'member'
         }]);
 
-      // Ignorar error si ya es miembro (código 23505 duplicate key)
-      if (joinError && joinError.code !== '23505') throw joinError;
+      if (joinError) {
+        if (joinError.code === '23505') { // Código duplicado
+          alert(`Ya eres miembro de ${team.name}`);
+        } else {
+          throw joinError;
+        }
+      } else {
+        alert(`✅ ¡Te has unido a ${team.name}!`);
+      }
 
-      // 3. ACTUALIZAR PERFIL (Para entrar directo)
-      const { error: profErr } = await supabase
-        .from('profiles')
-        .update({ active_team_id: team.id })
-        .eq('user_id', state.user.id); // user_id column in profiles
-
-      // Note: check if column is really user_id or id in profiles table. 
-      // Based on previous file content: .eq('id', state.user.id); at line 82.
-      // Wait, line 82 in previous file was .eq('id', state.user.id);
-      // Snippet says .eq('user_id', user.id);
-      // I should verify the table structure if possible or safer: update where id matches.
-      // Usually profiles.id is the user_id uuid. 
-      // I will trust the previous code that used .eq('id', state.user.id).
-      // actually, let's look at key usage.
-      // In the file read: 
-      // line 82: .eq('id', state.user.id);
-      // So I will use .eq('id', state.user.id) to be safe with existing schema assumptions.
-
-      if (profErr) throw profErr;
-
-      // 4. ÉXITO -> Recargar para ir al Dashboard
-      alert(`✅ ¡Te has unido a ${team.name}!`);
-      window.location.reload();
+      // 3. ACTUALIZAR PERFIL Y RECARGAR
+      await supabase.from('profiles').update({ active_team_id: team.id }).eq('user_id', state.user.id);
+      window.location.href = '/dashboard';
 
     } catch (err: any) {
-      console.error("Error al unirse:", err);
+      console.error(err);
       alert("Error: " + err.message);
-      setError(err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -342,15 +329,15 @@ const TeamSetup: React.FC = () => {
                 <span className="material-symbols-outlined text-4xl">vpn_key</span>
               </div>
               <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic">Unirse</h2>
-              <p className="text-slate-500 font-medium mt-2">Introduce el código que te han proporcionado.</p>
+              <p className="text-slate-500 font-medium mt-2">Introduce el código o el nombre del equipo.</p>
             </div>
 
             <form onSubmit={handleJoinTeam} className="space-y-8">
               <div className="flex flex-col gap-3">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em] ml-2">Código Secreto</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.25em] ml-2">Código o Nombre del Equipo</label>
                 <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-3xl h-20 px-8 text-3xl font-black outline-none transition-all tracking-[0.3em] text-center uppercase"
-                  placeholder="TEAM-0000"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-3xl h-20 px-8 text-xl font-bold outline-none transition-all tracking-wide text-center"
+                  placeholder="Ej: TEAM-123 o Marketing"
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                   required
