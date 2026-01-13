@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../src/supabaseClient';
 
 const TeamSetup: React.FC = () => {
   const { state, switchTeam, deleteTeam } = useStore();

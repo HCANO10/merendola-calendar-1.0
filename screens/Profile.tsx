@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../src/supabaseClient';
 
 /**
  * Profile component to manage user information like name and birthday.

@@ -4,7 +4,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-import { supabase } from '../supabaseClient';
+import { supabase } from '../src/supabaseClient';
 import { useStore } from '../store';
 import { RSVPStatus } from '../types';
 import TeamSwitcher from '../src/components/TeamSwitcher';

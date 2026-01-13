@@ -1,4 +1,4 @@
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 /**
  * Servicio de envío de correos electrónicos real.

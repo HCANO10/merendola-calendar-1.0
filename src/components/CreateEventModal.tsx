@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../supabaseClient'; // Asegúrate de que esta ruta es correcta
+import { supabase } from '../supabaseClient'; // Asegúrate de que esta ruta es correcta
 import { sendEventInvitation } from '../utils/emailService'; // Asegúrate de que esta ruta es correcta
 
 interface CreateEventModalProps {

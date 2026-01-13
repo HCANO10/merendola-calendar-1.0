@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../src/supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const SignIn: React.FC = () => {

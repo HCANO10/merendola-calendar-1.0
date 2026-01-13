@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, Team, AppState, Comment, Notification, Invite, RSVPStatus, SyncError, AppEvent } from './types';
-import { supabase } from './supabaseClient';
+import { supabase } from './src/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 
 // No loops or 406!

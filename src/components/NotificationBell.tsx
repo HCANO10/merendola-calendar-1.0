@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 export const NotificationBell = ({ userId }: { userId: string }) => {
     const [notifications, setNotifications] = useState<any[]>([]);
