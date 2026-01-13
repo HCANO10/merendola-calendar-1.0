@@ -1,74 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useNavigate } from 'react-router-dom'; // Asumiendo React Router v6
 
 export const ResetPassword = () => {
+    const navigate = useNavigate();
     const [password, setPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
     const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
 
-    const handleReset = async (e: React.FormEvent) => {
+    // Comprobamos si el enlace mágico nos ha logueado correctamente
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                setMessage('⚠️ No detectamos una sesión válida. Vuelve a pedir el correo.');
+            }
+        };
+        checkSession();
+    }, []);
+
+    const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (password !== confirm) return alert("Las contraseñas no coinciden");
-
         setLoading(true);
-        const { error } = await supabase.auth.updateUser({ password });
+        setMessage('');
 
-        if (error) {
-            alert("Error: " + error.message);
-        } else {
-            alert("✅ Contraseña actualizada. Ahora sí, entrando al Dashboard...");
-            window.location.href = '/dashboard';
+        // Validación mínima obligatoria de Supabase (6 chars)
+        if (password.length < 6) {
+            setMessage('⚠️ La contraseña debe tener al menos 6 caracteres (norma de seguridad).');
+            setLoading(false);
+            return;
         }
-        setLoading(false);
+
+        try {
+            // AL ESTAR YA LOGUEADOS POR EL ENLACE, SOLO ACTUALIZAMOS EL USUARIO
+            const { error } = await supabase.auth.updateUser({
+                password: password
+            });
+
+            if (error) throw error;
+
+            alert("✅ ¡Contraseña guardada! Entrando...");
+            navigate('/dashboard'); // O window.location.href = '/dashboard';
+
+        } catch (error: any) {
+            console.error(error);
+            setMessage('❌ Error: ' + (error.message || 'No se pudo guardar.'));
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        // ESTILO "PUSH SCREEN" / SIGN-IN IDÉNTICO
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
-            <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 border border-gray-100">
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+                <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+                    Nueva Contraseña
+                </h2>
+                <p className="text-center text-gray-500 mb-6 text-sm">
+                    Introduce tu nueva clave para guardarla.
+                </p>
 
-                <div className="text-center mb-8">
-                    <span className="text-4xl">🔐</span>
-                    <h2 className="mt-4 text-2xl font-bold text-gray-900">Nueva Contraseña</h2>
-                    <p className="text-gray-500 text-sm mt-2">Introduce tu nueva clave dos veces para confirmarla.</p>
-                </div>
-
-                <form onSubmit={handleReset} className="space-y-6">
+                <form onSubmit={handleUpdate} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nueva Contraseña</label>
+                        <label className="block text-gray-700 font-bold mb-2 text-sm">Contraseña</label>
                         <input
                             type="password"
                             value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                            placeholder="••••••••"
-                            required
-                            minLength={6}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Escribe aquí..."
+                            autoFocus
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar Contraseña</label>
-                        <input
-                            type="password"
-                            value={confirm}
-                            onChange={e => setConfirm(e.target.value)}
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                            placeholder="••••••••"
-                            required
-                            minLength={6}
-                        />
-                    </div>
+                    {message && (
+                        <div className={`text-sm p-3 rounded ${message.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {message}
+                        </div>
+                    )}
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-all shadow-md"
                     >
-                        {loading ? 'Actualizando...' : 'Cambiar Contraseña'}
+                        {loading ? 'Guardando...' : 'Guardar y Entrar'}
                     </button>
                 </form>
-
             </div>
         </div>
     );
