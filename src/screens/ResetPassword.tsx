@@ -6,25 +6,29 @@ export const ResetPassword = () => {
     const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [hasSession, setHasSession] = useState(false); // <--- EL PORTERO
+    const [isAuthenticated, setIsAuthenticated] = useState(false); // EL CERROJO
     const [status, setStatus] = useState({ type: '', msg: '' });
 
     useEffect(() => {
-        // 1. Verificar si YA tenemos sesión al cargar
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+        // 1. Check inmediato por si la sesión ya estaba
+        supabase.auth.getSession().then(({ data: { session } }) => {
             if (session) {
-                console.log("✅ Sesión detectada al inicio");
-                setHasSession(true);
+                console.log("✅ Sesión encontrada al inicio.");
+                setIsAuthenticated(true);
             }
-        };
-        checkSession();
+        });
 
-        // 2. Escuchar si la sesión llega un poco más tarde (por el enlace mágico)
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log("🔔 Evento Auth en Reset:", event);
-            if (session) {
-                setHasSession(true);
+        // 2. Escuchar cambios (Aquí es donde ocurre la magia del enlace)
+        const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log(`🔐 Evento Auth: ${event}`);
+
+            if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || session) {
+                setIsAuthenticated(true);
+            }
+
+            if (event === 'SIGNED_OUT') {
+                setIsAuthenticated(false);
+                setStatus({ type: 'error', msg: 'La sesión se ha cerrado. Vuelve a pedir el enlace.' });
             }
         });
 
@@ -35,73 +39,80 @@ export const ResetPassword = () => {
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        // DOBLE CHEQUEO DE SEGURIDAD
-        if (!hasSession) {
-            setStatus({ type: 'error', msg: '⏳ Esperando validación de seguridad... Intenta en 2 segundos.' });
-            return;
-        }
-
         setLoading(true);
         setStatus({ type: '', msg: '' });
 
+        // DOBLE VERIFICACIÓN DE SEGURIDAD
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            setStatus({ type: 'error', msg: '❌ Error Crítico: Se perdió la sesión. Recarga la página.' });
+            setLoading(false);
+            return;
+        }
+
         if (password.length < 6) {
-            setStatus({ type: 'error', msg: 'Mínimo 6 caracteres.' });
+            setStatus({ type: 'error', msg: 'La contraseña debe tener al menos 6 caracteres.' });
             setLoading(false);
             return;
         }
 
         try {
-            // Ahora es seguro llamar a updateUser porque el Portero nos dejó pasar
+            // Ahora sí, actualización segura
             const { error } = await supabase.auth.updateUser({ password: password });
 
             if (error) throw error;
 
-            setStatus({ type: 'success', msg: '✅ ¡Contraseña Actualizada! Redirigiendo...' });
-            setTimeout(() => navigate('/dashboard'), 2000);
+            setStatus({ type: 'success', msg: '✅ ¡Contraseña guardada! Redirigiendo...' });
+
+            setTimeout(() => {
+                navigate('/dashboard');
+            }, 2000);
 
         } catch (error: any) {
             console.error(error);
-            // Si falla, es posible que el enlace haya caducado de verdad
-            setStatus({ type: 'error', msg: 'Error: ' + (error.message || 'El enlace ha caducado.') });
+            setStatus({ type: 'error', msg: 'Error: ' + error.message });
         } finally {
             setLoading(false);
         }
     };
 
-    // --- RENDERIZADO DEL PORTERO ---
-    if (!hasSession) {
+    // --- MIENTRAS NO HAYA SESIÓN, MOSTRAMOS SPINNER ---
+    // Esto evita que el usuario intente enviar el formulario antes de tiempo
+    if (!isAuthenticated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center p-8 bg-white rounded-xl shadow-lg animate-pulse">
-                    <h2 className="text-xl font-bold text-indigo-600 mb-2">Validando enlace seguro...</h2>
-                    <p className="text-gray-500 text-sm">Estamos verificando tu identidad con Supabase.</p>
-                    <p className="text-xs text-gray-400 mt-4">No cierres esta ventana.</p>
+                <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-sm mx-auto">
+                    <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <h2 className="text-xl font-bold text-gray-800">Verificando Enlace...</h2>
+                    <p className="text-gray-500 text-sm mt-2">Estamos validando tu seguridad con Supabase.</p>
+                    <p className="text-xs text-gray-400 mt-4">Si esto tarda más de 10 segundos, el enlace ha caducado.</p>
                 </div>
             </div>
         );
     }
 
-    // --- FORMULARIO REAL (Solo se ve si hay sesión) ---
+    // --- FORMULARIO (SOLO VISIBLE SI isAuthenticated === true) ---
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100">
-                <div className="text-center mb-8">
-                    <span className="text-4xl">🔐</span>
-                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Nueva Contraseña</h2>
-                    <div className="bg-green-50 text-green-700 text-xs py-1 px-2 rounded-full inline-block mt-2 font-bold">
-                        Identidad Verificada ✅
+            <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100 animate-in fade-in zoom-in duration-300">
+
+                <div className="text-center mb-6">
+                    <span className="text-4xl">🔓</span>
+                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Establecer Contraseña</h2>
+                    <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold mt-2">
+                        <span>✓</span> Sesión Segura Activa
                     </div>
                 </div>
 
                 <form onSubmit={handleReset} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Clave</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Contraseña</label>
                         <input
                             type="password"
                             required
-                            placeholder="••••••••"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            minLength={6}
+                            placeholder="Escribe tu nueva clave"
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
@@ -116,11 +127,12 @@ export const ResetPassword = () => {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-lg transition-all"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
                     >
-                        {loading ? 'Guardando...' : 'Cambiar Contraseña'}
+                        {loading ? 'Guardando...' : 'Confirmar Cambio'}
                     </button>
                 </form>
+
             </div>
         </div>
     );
