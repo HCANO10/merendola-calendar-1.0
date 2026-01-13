@@ -2,24 +2,25 @@ import React, { useState, useEffect } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import interactionPlugin from '@fullcalendar/interaction'; // IMPORTANTE PARA EL CLIC
 import esLocale from '@fullcalendar/core/locales/es';
 
 import { supabase } from '../src/supabaseClient';
-import { CreateEventModal } from '../src/components/CreateEventModal'; // Adjusted import path
-import { EventDetailsModal } from '../src/components/EventDetailsModal'; // Adjusted import path
-import { NotificationBell } from '../src/components/NotificationBell'; // Adjusted import path
+import { CreateEventModal } from '../src/components/CreateEventModal';
+import { EventDetailsModal } from '../src/components/EventDetailsModal';
+import { NotificationBell } from '../src/components/NotificationBell';
 
-export const Dashboard = () => {
+const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [team, setTeam] = useState<any>(null);
-  const [events, setEvents] = useState<any[]>([]);
   const [allTeams, setAllTeams] = useState<any[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
   // Modales
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [clickedDate, setClickedDate] = useState<Date | null>(null); // Para guardar donde hizo clic
 
   useEffect(() => {
     fetchUserData();
@@ -32,9 +33,10 @@ export const Dashboard = () => {
       if (!user) return;
       setUser(user);
 
-      // 1. Perfil y Equipos
+      // Perfil y Equipos
       const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).single();
       const { data: memberships } = await supabase.from('memberships').select('teams(*)').eq('user_id', user.id);
+
       const teamsList = memberships?.map((m: any) => m.teams) || [];
       const activeTeam = teamsList.find((t: any) => t.id === profile?.active_team_id) || teamsList[0];
 
@@ -42,7 +44,7 @@ export const Dashboard = () => {
       setTeam(activeTeam);
 
       if (activeTeam) {
-        // 2. Cargar Eventos
+        // Cargar Eventos
         const { data: rawEvents } = await supabase
           .from('events')
           .select(`
@@ -52,26 +54,24 @@ export const Dashboard = () => {
           `)
           .eq('team_id', activeTeam.id);
 
-        // 3. TRANSFORMACIÓN PARA FULLCALENDAR
-        const formattedEvents = (rawEvents || []).map((e: any) => {
-          // Determinar color según mi asistencia
+        const formatted = (rawEvents || []).map((e: any) => {
           const myPart = e.event_participants?.find((p: any) => p.user_id === user.id);
-          let color = '#4f46e5'; // Indigo (Default)
-          if (myPart?.status === 'going') color = '#10b981'; // Verde
-          if (myPart?.status === 'not_going') color = '#ef4444'; // Rojo
+          let bgColor = '#4f46e5';
+          if (myPart?.status === 'going') bgColor = '#10b981';
+          if (myPart?.status === 'not_going') bgColor = '#ef4444';
 
           return {
             id: e.id,
             title: e.title,
-            start: e.start_time, // FullCalendar lee strings ISO perfectamente
+            start: e.start_time,
             end: e.end_time,
-            backgroundColor: color,
-            borderColor: color,
-            extendedProps: { ...e } // Guardamos todos los datos originales aquí
+            backgroundColor: bgColor,
+            borderColor: bgColor,
+            extendedProps: { ...e }
           };
         });
 
-        setEvents(formattedEvents);
+        setCalendarEvents(formatted);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -80,43 +80,52 @@ export const Dashboard = () => {
     }
   };
 
+  // --- INTERACCIÓN: CLIC EN FECHA (CREAR) ---
+  const handleDateClick = (arg: any) => {
+    setClickedDate(arg.date); // Guardamos la fecha del clic
+    setIsCreateModalOpen(true); // Abrimos modal
+  };
+
+  // --- INTERACCIÓN: CLIC EN EVENTO (DETALLES) ---
   const handleEventClick = (info: any) => {
-    // Recuperamos los datos originales de extendedProps
     setSelectedEvent(info.event.extendedProps);
   };
 
+  // Resto de handlers
   const handleTeamChange = async (e: any) => {
     await supabase.from('profiles').update({ active_team_id: e.target.value }).eq('user_id', user.id);
     window.location.reload();
   };
 
+  // Corrección de firma: eliminamos 'e' para coincidir con EventDetailsModal
   const handleRSVP = async (eventId: string, status: string) => {
-    // FIX: Removing 'e' arg to match EventDetailsModal signature (id, status)
     await supabase.from('event_participants').upsert({
       event_id: eventId, user_id: user.id, status
     });
-    fetchUserData(); // Recargar para actualizar colores
+    fetchUserData();
     setSelectedEvent(null);
   };
 
   const handleDeleteEvent = async (eventId: string) => {
+    if (!window.confirm("¿Borrar merienda?")) return;
     await supabase.from('events').delete().eq('id', eventId);
     fetchUserData();
     setSelectedEvent(null);
   };
 
-  if (loading) return <div className="flex h-full items-center justify-center font-bold text-indigo-600">Cargando Calendario...</div>;
+  if (loading) return <div className="flex h-full items-center justify-center text-indigo-600 font-bold">Cargando...</div>;
 
   return (
-    <div className="flex flex-col h-full space-y-4">
-      {/* HEADER */}
+    <div className="flex flex-col h-full space-y-4 p-4">
+
+      {/* HEADER DASHBOARD */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div>
-          <label className="text-xs font-bold text-gray-400 uppercase">Equipo</label>
+        <div className="w-full md:w-auto">
+          <label className="text-xs font-bold text-gray-400 uppercase block">Equipo</label>
           <select
             value={team?.id}
             onChange={handleTeamChange}
-            className="block w-full bg-transparent font-bold text-lg text-gray-800 border-none p-0 focus:ring-0 cursor-pointer"
+            className="bg-transparent font-bold text-lg text-gray-800 border-none p-0 focus:ring-0 cursor-pointer w-full"
           >
             {allTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
@@ -125,20 +134,16 @@ export const Dashboard = () => {
         <div className="flex items-center gap-4">
           {user && <NotificationBell userId={user.id} />}
           <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2"
+            onClick={() => { setClickedDate(new Date()); setIsCreateModalOpen(true); }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg font-bold shadow-md transition flex items-center gap-2"
           >
-            <span>📅</span> Nueva Merienda
+            <span>＋</span> Crear Merienda
           </button>
         </div>
       </div>
 
-      {/* CALENDARIO FULLCALENDAR */}
-      <div className="flex-1 bg-white p-4 rounded-xl shadow-lg border border-gray-200 overflow-hidden relative z-0">
-        <style>{`
-          .fc-button-primary { background-color: #4f46e5 !important; border-color: #4f46e5 !important; }
-          .fc-button-primary:hover { background-color: #4338ca !important; border-color: #4338ca !important; }
-        `}</style>
+      {/* CALENDARIO */}
+      <div className="flex-1 bg-white p-2 md:p-4 rounded-xl shadow-lg border border-gray-200 overflow-hidden">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
@@ -148,10 +153,16 @@ export const Dashboard = () => {
             right: 'dayGridMonth,timeGridWeek'
           }}
           locale={esLocale}
-          events={events}
-          eventClick={handleEventClick}
+          events={calendarEvents}
+
+          // ACTIVAMOS INTERACCIONES
+          dateClick={handleDateClick}  // Clic en celda vacía -> Crear
+          eventClick={handleEventClick} // Clic en evento -> Detalles
+
           height="100%"
-          eventDisplay="block" // Hace que los eventos se vean como bloques de color
+          editable={false}
+          selectable={true}
+          dayMaxEvents={true}
         />
       </div>
 
@@ -159,12 +170,13 @@ export const Dashboard = () => {
       <CreateEventModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onEventCreated={fetchUserData}
+        onEventCreated={fetchUserData} // Esto asegura que aparezca el evento al guardar
         teamId={team?.id}
         creatorName={user?.email}
         teamName={team?.name}
-        userId={user?.id} // FIX: Added missing userId prop
         members={[]}
+        initialDate={clickedDate} // Pasamos la fecha del clic
+        userId={user?.id} // Corrección: Añadido userId
       />
 
       {selectedEvent && (
