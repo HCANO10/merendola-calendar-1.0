@@ -270,78 +270,54 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             teamMembers = [];
           }
 
+          // 2. QUERY SIMPLIFICADA (Para evitar el error 400)
+          let safeEvents: AppEvent[] = [];
+
           try {
-            console.log('[Store] [fetchUserData] step=events');
-            const { data: eData, error: eErr } = await supabase
+            console.log('[Store] [fetchUserData] step=events_simplified');
+            const { data: eventsData, error: eventsError } = await supabase
               .from('events')
               .select(`
-                *,
-                profiles:created_by ( full_name ), 
-                event_participants (
-                  status,
-                  user_id,
-                  profiles ( full_name, email )
-                )
+                 id, title, description, start_time, end_time, location, created_by, team_id,
+                 event_participants ( status, user_id )
               `)
               .eq('team_id', activeTeamId)
-              .order('start_time', { ascending: true });
+            // .order('start_time', { ascending: true }); // Opcional, si falla quitamos
 
-            if (eErr) throw eErr;
-            if (eData) {
-              events = eData.map((s: any) => ({
-                id: s.id,
-                userId: s.created_by,
-                team_id: s.team_id,
-                title: s.title,
-                contribution: s.contribution || '',
-                date: s.start_time ? s.start_time.split('T')[0] : '',
-                time: s.start_time ? s.start_time.split('T')[1].substring(0, 5) : '',
-                description: s.description,
-                location: s.location,
-                userName: s.profiles?.full_name || 'Compañero',
-                confirmedUserIds: [], // Legacy
+            if (eventsError) {
+              console.error("🔥 Error cargando eventos:", eventsError);
+              // safeEvents se queda []
+            } else {
+              // Mapeo seguro
+              safeEvents = (eventsData || []).map((e: any) => ({
+                id: e.id,
+                userId: e.created_by,
+                team_id: e.team_id,
+                title: e.title || 'Sin título',
+                contribution: '', // Simplificado
+                date: e.start_time ? e.start_time.split('T')[0] : '',
+                time: e.start_time ? e.start_time.split('T')[1]?.substring(0, 5) : '',
+                description: e.description || '',
+                location: e.location || '',
+                userName: 'Compañero', // Simplificado
+                confirmedUserIds: [],
                 comments: [],
-                start_time: s.start_time,
-                end_time: s.end_time,
-                profiles: s.profiles,
-                event_participants: s.event_participants || []
+                // Mantenemos string para cumplir interface AppEvent
+                start_time: e.start_time,
+                end_time: e.end_time,
+                event_participants: e.event_participants || []
               }));
             }
+            events = safeEvents;
 
-            // 7c. Get Invites Separately (FAIL-SAFE)
-            try {
-              const { data: aData } = await supabase
-                .from('attendees')
-                .select('*')
-                .in('merendola_id', events.map(e => e.id));
-
-              if (aData) {
-                invites = aData.map((a: any) => ({
-                  id: `att_${a.merendola_id}_${a.user_id}`,
-                  merendolaId: a.merendola_id,
-                  userId: a.user_id,
-                  status: a.status
-                }));
-              }
-            } catch (aErr) {
-              console.warn('[Store] Fail-safe: attendees fetch failed', aErr);
-            }
+            // 3. Invites (Attendees) - Legacy but kept for structure
+            invites = [];
 
           } catch (e) {
             console.warn('[Store] Fail-safe: events error', e);
             events = [];
-            invites = [];
           }
-        } else {
-          // GHOST TEAM SANITIZATION
-          console.warn(`[Store] [Auto-Curación] Active team ${activeTeamId} not found. Sanitizing profile.`);
-          await supabase
-            .from('profiles')
-            .update({ active_team_id: null })
-            .eq('user_id', userId);
 
-          user.activeTeamId = undefined;
-          team = null;
         }
       }
 
