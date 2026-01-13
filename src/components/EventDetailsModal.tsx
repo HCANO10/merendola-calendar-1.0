@@ -1,5 +1,4 @@
 import React from 'react';
-import moment from 'moment';
 
 interface Props {
     isOpen: boolean;
@@ -41,7 +40,7 @@ export const EventDetailsModal = ({ isOpen, onClose, event, currentUserId, onDel
                     </div>
 
                     <div className="mt-4 flex flex-col gap-1 text-indigo-100 text-sm">
-                        <p>📅 {moment(event.start_time).format('LLLL')}</p>
+                        <p>📅 {new Date(event.start_time).toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'short' })}</p>
                         <p>📍 {event.location || 'Ubicación pendiente'}</p>
                     </div>
                 </div>

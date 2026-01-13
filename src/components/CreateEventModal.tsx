@@ -11,10 +11,11 @@ interface CreateEventModalProps {
     teamName: string;
     creatorName: string;
     members: any[];
+    initialDate?: Date;
 }
 
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({
-    isOpen, onClose, onEventCreated, teamId, userId, teamName, creatorName, members
+    isOpen, onClose, onEventCreated, teamId, userId, teamName, creatorName, members, initialDate
 }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -28,11 +29,20 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
             setTitle('');
             setDescription('');
             setLocation('');
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            now.setMinutes(0);
-            const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-            setStartDateTime(localIso);
+
+            if (initialDate) {
+                // Adjust to local timezone string "YYYY-MM-DDTHH:mm"
+                // Assuming initialDate is passed from FullCalendar (likely local date or UTC)
+                // If it's pure date (no time), adjust.
+                const localIso = new Date(initialDate.getTime() - (initialDate.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                setStartDateTime(localIso);
+            } else {
+                const now = new Date();
+                now.setHours(now.getHours() + 1);
+                now.setMinutes(0);
+                const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                setStartDateTime(localIso);
+            }
         }
     }, [isOpen]);
 
