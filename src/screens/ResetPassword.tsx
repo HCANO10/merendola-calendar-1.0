@@ -6,37 +6,44 @@ export const ResetPassword = () => {
     const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Guardamos el token en memoria localmente, sin depender de Supabase global
+    const [recoveryToken, setRecoveryToken] = useState<string | null>(null);
+    const [refreshToken, setRefreshToken] = useState<string | null>(null);
+
     const [status, setStatus] = useState({ type: '', msg: '' });
 
-    // Guardamos los tokens para usarlos "Just-In-Time"
-    const [recoveryTokens, setRecoveryTokens] = useState<{ access: string, refresh: string } | null>(null);
-
     useEffect(() => {
-        const extractTokens = async () => {
-            // 1. Intentar obtener de la URL (Prioridad Máxima)
-            const hash = window.location.hash;
-            const params = new URLSearchParams(hash.replace('#', '?'));
-            const accessToken = params.get('access_token');
-            const refreshToken = params.get('refresh_token');
+        // 1. CAPTURA INMEDIATA DE TOKENS
+        // No esperamos a eventos. Leemos la URL cruda.
+        const hash = window.location.hash;
+        console.log("🔍 Analizando URL:", hash);
 
-            if (accessToken) {
-                console.log("🎟️ Tokens detectados en URL. Guardándolos para uso JIT.");
-                setRecoveryTokens({ access: accessToken, refresh: refreshToken || '' });
+        if (hash && hash.includes('access_token')) {
+            const params = new URLSearchParams(hash.substring(1)); // Quitar el #
+            const aToken = params.get('access_token');
+            const rToken = params.get('refresh_token');
 
-                // Intentar establecer sesión inicial (para feedback visual)
-                await supabase.auth.setSession({
-                    access_token: accessToken,
-                    refresh_token: refreshToken || ''
-                });
+            if (aToken) {
+                console.log("💎 Token capturado y asegurado en memoria.");
+                setRecoveryToken(aToken);
+                setRefreshToken(rToken);
+                // Limpiamos la URL para que no se vea feo, pero guardamos el token en React
+                window.history.replaceState(null, '', window.location.pathname);
             } else {
-                // 2. Si no hay en URL, ver si ya hay sesión establecida
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) {
-                    setStatus({ type: 'error', msg: 'Enlace inválido o expirado.' });
-                }
+                setStatus({ type: 'error', msg: 'Enlace dañado: Falta el token.' });
             }
-        };
-        extractTokens();
+        } else {
+            // Si no hay hash, comprobamos si Supabase ya capturó la sesión por su cuenta
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    console.log("✅ Sesión global detectada.");
+                    setRecoveryToken(session.access_token);
+                } else {
+                    setStatus({ type: 'error', msg: 'No se detectó el enlace de recuperación. Pide uno nuevo.' });
+                }
+            });
+        }
     }, []);
 
     const handleReset = async (e: React.FormEvent) => {
@@ -44,33 +51,31 @@ export const ResetPassword = () => {
         setLoading(true);
         setStatus({ type: '', msg: '' });
 
-        if (password.length < 6) {
-            setStatus({ type: 'error', msg: 'La contraseña debe tener al menos 6 caracteres.' });
+        if (!recoveryToken) {
+            setStatus({ type: 'error', msg: '⛔ Error crítico: No tengo el token de seguridad. Reinicia el proceso.' });
             setLoading(false);
             return;
         }
 
         try {
-            // --- ESTRATEGIA JIT (JUST-IN-TIME) ---
-            // Antes de actualizar, aseguramos la sesión por la fuerza bruta
-            if (recoveryTokens) {
-                console.log("💉 Inyección JIT de sesión antes del update...");
-                const { error: sessionError } = await supabase.auth.setSession({
-                    access_token: recoveryTokens.access,
-                    refresh_token: recoveryTokens.refresh
-                });
-                if (sessionError) console.warn("Advertencia JIT:", sessionError);
+            // 2. INYECCIÓN JUST-IN-TIME (El truco del experto)
+            // Antes de actualizar, FORZAMOS la sesión con el token que guardamos
+            console.log("💉 Inyectando sesión para autorización...");
+
+            const { error: sessionError } = await supabase.auth.setSession({
+                access_token: recoveryToken,
+                refresh_token: refreshToken || recoveryToken, // Fallback si no hay refresh
+            });
+
+            if (sessionError) {
+                console.warn("Aviso de sesión:", sessionError.message);
+                // Intentamos seguir igualmente, a veces updateUser funciona si el token sigue vivo
             }
 
-            // Verificación final de que TENEMOS algo
-            const { data: { session: finalSession } } = await supabase.auth.getSession();
-            if (!finalSession) {
-                throw new Error("No se pudo establecer la sesión segura para el cambio.");
-            }
-
-            console.log("🔄 Intentando updateUser con sesión:", finalSession.user.id);
-
-            const { error } = await supabase.auth.updateUser({ password: password });
+            // 3. ACTUALIZACIÓN BLINDADA
+            const { error } = await supabase.auth.updateUser({
+                password: password
+            });
 
             if (error) throw error;
 
@@ -81,76 +86,53 @@ export const ResetPassword = () => {
             }, 1500);
 
         } catch (error: any) {
-            console.error("Error Reset:", error);
-            setStatus({ type: 'error', msg: 'Error: ' + (error.message || 'Fallo desconocido') });
+            console.error("Fallo al actualizar:", error);
+            setStatus({ type: 'error', msg: 'Error: ' + (error.message || 'Token expirado') });
         } finally {
             setLoading(false);
         }
     };
-
-    // Render condicional basado en si tenemos tokens o sesión
-    const isReady = !!recoveryTokens;
-
-    if (status.msg && status.type === 'error' && !isReady) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-                <div className="bg-white p-8 rounded-xl shadow-lg text-center">
-                    <h2 className="text-xl font-bold text-red-600 mb-2">Error de Enlace</h2>
-                    <p className="text-gray-600 mb-4">{status.msg}</p>
-                    <button onClick={() => navigate('/')} className="text-indigo-600 underline">Volver al Inicio</button>
-                </div>
-            </div>
-        );
-    }
-
-    if (!isReady && !status.msg) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <div className="animate-spin w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Analizando credenciales...</p>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100">
 
                 <div className="text-center mb-6">
-                    <span className="text-4xl">🔑</span>
+                    <span className="text-4xl">🔐</span>
                     <h2 className="text-2xl font-bold text-gray-800 mt-2">Nueva Contraseña</h2>
-                    <div className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full mt-2 font-bold">
-                        Modo Recuperación Seguro
-                    </div>
+                    {recoveryToken ? (
+                        <span className="text-xs font-mono text-green-600 bg-green-50 px-2 py-1 rounded">Token Seguro: OK</span>
+                    ) : (
+                        <span className="text-xs font-mono text-red-500 bg-red-50 px-2 py-1 rounded">Esperando Token...</span>
+                    )}
                 </div>
 
                 <form onSubmit={handleReset} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Tu Nueva Clave</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Clave</label>
                         <input
                             type="password"
                             required
-                            placeholder="••••••••"
+                            minLength={6}
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Escribe tu nueva clave"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
 
                     {status.msg && (
-                        <div className={`p-3 rounded-lg text-sm font-medium ${status.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                        <div className={`p-3 rounded-lg text-sm font-bold text-center ${status.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                             {status.msg}
                         </div>
                     )}
 
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
+                        disabled={loading || !recoveryToken}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {loading ? 'Guardando...' : 'Cambiar Ahora'}
+                        {loading ? 'Procesando...' : 'Cambiar Contraseña'}
                     </button>
                 </form>
             </div>
