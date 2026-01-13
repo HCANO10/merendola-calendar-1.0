@@ -2,41 +2,52 @@ import React, { useState } from 'react';
 import { Sidebar } from '../components/Sidebar';
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
-    const [isOpen, setIsOpen] = useState(false);
+    // En escritorio empieza abierto, en móvil cerrado
+    const [isOpen, setIsOpen] = useState(window.innerWidth > 768);
 
     return (
-        <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
-            {/* Header */}
-            <header className="bg-white h-16 border-b border-gray-200 flex items-center px-4 justify-between flex-shrink-0 z-30 relative">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded hover:bg-gray-100">
-                        ☰
-                    </button>
-                    <h1 className="font-bold text-gray-800 text-lg">🍪 Merendola</h1>
+        <div className="flex h-screen bg-gray-50 overflow-hidden">
+
+            {/* 1. SIDEBAR WRAPPER (El que se encoge y estira) */}
+            <aside
+                className={`
+          bg-white border-r border-gray-200 flex-shrink-0
+          transition-all duration-300 ease-in-out
+          ${isOpen ? 'w-64' : 'w-0'} 
+          overflow-hidden
+        `}
+            >
+                {/* Contenedor interno fijo para evitar que el texto baile al cerrar */}
+                <div className="w-64 h-full">
+                    <Sidebar mobileClose={() => window.innerWidth < 768 && setIsOpen(false)} />
                 </div>
-            </header>
+            </aside>
 
-            {/* Body */}
-            <div className="flex flex-1 overflow-hidden relative">
-                {/* Sidebar */}
-                <aside className={`
-          absolute md:relative z-20 h-full bg-white transition-all duration-300 ease-in-out border-r border-gray-200 shadow-xl md:shadow-none
-          ${isOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:w-0 md:-translate-x-0'}
-        `}>
-                    <div className="w-64 h-full overflow-hidden">
-                        <Sidebar mobileClose={() => window.innerWidth < 768 && setIsOpen(false)} />
+            {/* 2. MAIN CONTENT (Se adapta al espacio restante) */}
+            <div className="flex-1 flex flex-col min-w-0">
+
+                {/* HEADER / TOP BAR */}
+                <header className="bg-white h-16 border-b border-gray-200 flex items-center px-4 justify-between flex-shrink-0">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setIsOpen(!isOpen)}
+                            className="p-2 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+                            aria-label="Toggle Sidebar"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                        <h1 className="font-bold text-gray-800 text-lg">🍪 Merendola</h1>
                     </div>
-                </aside>
+                </header>
 
-                {/* Content */}
-                <main className="flex-1 overflow-y-auto p-4 w-full relative">
-                    {/* Backdrop móvil */}
-                    {isOpen && (
-                        <div className="md:hidden absolute inset-0 bg-black/20 z-10 backdrop-blur-sm" onClick={() => setIsOpen(false)}></div>
-                    )}
+                {/* CONTENT BODY */}
+                <main className="flex-1 overflow-y-auto p-4 relative">
                     {children}
                 </main>
             </div>
+
         </div>
     );
 };
