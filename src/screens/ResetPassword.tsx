@@ -6,65 +6,63 @@ export const ResetPassword = () => {
     const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [sessionReady, setSessionReady] = useState(false); // Semáforo manual
+    const [isSessionValid, setIsSessionValid] = useState(false); // EL SEMÁFORO
     const [status, setStatus] = useState({ type: '', msg: '' });
 
     useEffect(() => {
-        const handleSessionRecovery = async () => {
+        const forceSession = async () => {
             try {
-                // 1. INTENTO AUTOMÁTICO (Lo normal)
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                // 1. EXTRACTOR QUIRÚRGICO DE TOKENS
+                // Buscamos el token directamente en la URL, sin esperar a Supabase
+                const hash = window.location.hash;
 
-                if (currentSession) {
-                    console.log("✅ Sesión detectada automáticamente.");
-                    setSessionReady(true);
-                    return;
-                }
-
-                // 2. INTENTO MANUAL (La solución Experta)
-                // Si Supabase falló, leemos el hash nosotros mismos
-                const hash = window.location.hash.substring(1); // Quitar el '#'
-                const params = new URLSearchParams(hash);
+                // Convertimos el hash en parámetros usables
+                const params = new URLSearchParams(hash.replace('#', '?'));
                 const accessToken = params.get('access_token');
                 const refreshToken = params.get('refresh_token');
-                const type = params.get('type');
 
-                if (accessToken && (type === 'recovery' || type === 'magiclink')) {
-                    console.log("🔧 Interceptando token manualmente...");
-
-                    const { error } = await supabase.auth.setSession({
-                        access_token: accessToken,
-                        refresh_token: refreshToken || '',
-                    });
-
-                    if (error) throw error;
-
-                    console.log("✅ Sesión forzada manualmente con éxito.");
-                    setSessionReady(true);
-                } else {
-                    // Si no hay hash y no hay sesión, estamos perdidos
-                    console.warn("⚠️ No se encontró sesión ni tokens en la URL.");
+                if (!accessToken) {
+                    // Si no hay token en la URL, verificamos si ya había sesión guardada de antes
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                        console.log("✅ Sesión existente recuperada.");
+                        setIsSessionValid(true);
+                        return;
+                    }
+                    throw new Error("No se encontró el token de recuperación. El enlace está roto.");
                 }
 
+                // 2. INYECCIÓN MANUAL DE SESIÓN
+                console.log("💉 Inyectando sesión manualmente...");
+                const { error } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken || '',
+                });
+
+                if (error) throw error;
+
+                console.log("✅ Sesión establecida con fuerza bruta.");
+                setIsSessionValid(true); // ABRIMOS EL SEMÁFORO
+
             } catch (error: any) {
-                console.error("Error recuperando sesión:", error);
-                setStatus({ type: 'error', msg: 'El enlace es inválido o ha expirado. Pide uno nuevo.' });
+                console.error("Fallo crítico de sesión:", error);
+                setStatus({ type: 'error', msg: 'Enlace inválido o expirado. Pide uno nuevo.' });
             }
         };
 
-        handleSessionRecovery();
+        forceSession();
     }, []);
 
     const handleReset = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!sessionReady) {
-            setStatus({ type: 'error', msg: '⏳ No se ha establecido la conexión segura. Espera un momento.' });
-            return;
-        }
-
         setLoading(true);
         setStatus({ type: '', msg: '' });
+
+        if (!isSessionValid) {
+            setStatus({ type: 'error', msg: '⛔ No hay sesión segura. Recarga la página.' });
+            setLoading(false);
+            return;
+        }
 
         if (password.length < 6) {
             setStatus({ type: 'error', msg: 'La contraseña debe tener al menos 6 caracteres.' });
@@ -73,85 +71,95 @@ export const ResetPassword = () => {
         }
 
         try {
-            // 3. ACTUALIZACIÓN (Ahora sabemos 100% que hay sesión)
+            // 3. ACTUALIZACIÓN (Ahora es seguro porque forzamos la sesión arriba)
             const { error } = await supabase.auth.updateUser({ password: password });
 
             if (error) throw error;
 
-            setStatus({ type: 'success', msg: '✅ ¡Contraseña cambiada! Redirigiendo...' });
+            setStatus({ type: 'success', msg: '✅ ¡CONTRASEÑA ACTUALIZADA! Redirigiendo...' });
 
             setTimeout(() => {
-                // Intentamos ir al dashboard, si falla, al login
                 navigate('/dashboard');
             }, 2000);
 
         } catch (error: any) {
             console.error(error);
-            setStatus({ type: 'error', msg: 'Error al guardar: ' + error.message });
+            setStatus({ type: 'error', msg: 'Error: ' + error.message });
         } finally {
             setLoading(false);
         }
     };
 
-    // VISTA DE CARGA (Mientras intentamos forzar la sesión)
-    if (!sessionReady && !status.msg) {
+    // --- VISTA DE CARGA (MIENTRAS INYECTAMOS LA SESIÓN) ---
+    if (!isSessionValid && !status.msg) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center">
-                    <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="mt-4 text-gray-600 font-medium">Validando credenciales de recuperación...</p>
+                <div className="text-center p-8">
+                    <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <h2 className="mt-4 text-xl font-bold text-gray-700">Validando Token de Seguridad...</h2>
+                    <p className="text-gray-500 text-sm">No cierres esta ventana.</p>
                 </div>
             </div>
         );
     }
 
+    // --- VISTA DE ERROR FATAL ---
+    if (status.msg && status.type === 'error' && !isSessionValid) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md">
+                    <div className="text-red-500 text-5xl mb-4">⚠️</div>
+                    <h2 className="text-xl font-bold text-gray-800">Enlace Caducado</h2>
+                    <p className="text-gray-600 mt-2">{status.msg}</p>
+                    <button onClick={() => navigate('/')} className="mt-6 bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold w-full">
+                        Volver al Inicio
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- FORMULARIO (SOLO SI EL TOKEN FUE VÁLIDO) ---
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100">
 
                 <div className="text-center mb-6">
                     <span className="text-4xl">🔐</span>
-                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Restablecer Password</h2>
+                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Restablecer Contraseña</h2>
+                    <div className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full mt-2 font-bold">
+                        Conexión Segura Establecida
+                    </div>
                 </div>
 
-                {/* Si hubo error fatal al cargar token */}
-                {status.msg && status.type === 'error' && !sessionReady ? (
-                    <div className="bg-red-50 text-red-600 p-4 rounded-lg text-center font-bold">
-                        {status.msg}
-                        <button onClick={() => navigate('/')} className="block w-full mt-4 text-sm underline text-red-800">
-                            Volver al inicio
-                        </button>
+                <form onSubmit={handleReset} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Contraseña</label>
+                        <input
+                            type="password"
+                            required
+                            minLength={6}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="Escribe tu nueva clave"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
                     </div>
-                ) : (
-                    <form onSubmit={handleReset} className="space-y-6">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Contraseña</label>
-                            <input
-                                type="password"
-                                required
-                                minLength={6}
-                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Escribe tu nueva clave"
-                            />
+
+                    {status.msg && (
+                        <div className={`p-3 rounded-lg text-sm font-medium ${status.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                            {status.msg}
                         </div>
+                    )}
 
-                        {status.msg && (
-                            <div className={`p-3 rounded-lg text-sm font-medium ${status.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                                {status.msg}
-                            </div>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
-                        >
-                            {loading ? 'Guardando...' : 'Cambiar y Entrar'}
-                        </button>
-                    </form>
-                )}
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
+                    >
+                        {loading ? 'Guardando...' : 'Cambiar y Entrar'}
+                    </button>
+                </form>
             </div>
         </div>
     );
