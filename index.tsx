@@ -1,8 +1,8 @@
-
 import React from 'react';
-import './index.css';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './index.css';
+import { StoreProvider } from './store'; // Importado desde la raíz
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -12,6 +12,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <StoreProvider>
+      <App />
+    </StoreProvider>
   </React.StrictMode>
 );
