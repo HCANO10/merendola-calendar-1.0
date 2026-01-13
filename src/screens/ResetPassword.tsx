@@ -1,121 +1,125 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
+
+// Necesitamos las variables de entorno para montar la URL de la API a mano
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const ResetPassword = () => {
     const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-
-    // Guardamos el token en memoria localmente, sin depender de Supabase global
-    const [recoveryToken, setRecoveryToken] = useState<string | null>(null);
-    const [refreshToken, setRefreshToken] = useState<string | null>(null);
-
+    const [accessToken, setAccessToken] = useState<string | null>(null);
     const [status, setStatus] = useState({ type: '', msg: '' });
 
     useEffect(() => {
-        // 1. CAPTURA INMEDIATA DE TOKENS
-        // No esperamos a eventos. Leemos la URL cruda.
+        // 1. EXTRAER TOKEN PURO
         const hash = window.location.hash;
-        console.log("🔍 Analizando URL:", hash);
+        console.log("🔍 Hash detectado:", hash);
 
-        if (hash && hash.includes('access_token')) {
-            const params = new URLSearchParams(hash.substring(1)); // Quitar el #
-            const aToken = params.get('access_token');
-            const rToken = params.get('refresh_token');
+        // Parsear manualmente para no depender de nadie
+        const params = new URLSearchParams(hash.replace('#', '?'));
+        const token = params.get('access_token');
 
-            if (aToken) {
-                console.log("💎 Token capturado y asegurado en memoria.");
-                setRecoveryToken(aToken);
-                setRefreshToken(rToken);
-                // Limpiamos la URL para que no se vea feo, pero guardamos el token en React
-                window.history.replaceState(null, '', window.location.pathname);
-            } else {
-                setStatus({ type: 'error', msg: 'Enlace dañado: Falta el token.' });
-            }
+        if (token) {
+            console.log("🔑 Token capturado para uso directo.");
+            setAccessToken(token);
+            // Limpiar URL por estética
+            window.history.replaceState(null, '', window.location.pathname);
         } else {
-            // Si no hay hash, comprobamos si Supabase ya capturó la sesión por su cuenta
-            supabase.auth.getSession().then(({ data: { session } }) => {
-                if (session) {
-                    console.log("✅ Sesión global detectada.");
-                    setRecoveryToken(session.access_token);
-                } else {
-                    setStatus({ type: 'error', msg: 'No se detectó el enlace de recuperación. Pide uno nuevo.' });
-                }
-            });
+            setStatus({ type: 'error', msg: 'No se encontró el token de seguridad. El enlace está roto.' });
         }
     }, []);
 
-    const handleReset = async (e: React.FormEvent) => {
+    const handleDirectReset = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setStatus({ type: '', msg: '' });
 
-        if (!recoveryToken) {
-            setStatus({ type: 'error', msg: '⛔ Error crítico: No tengo el token de seguridad. Reinicia el proceso.' });
+        if (!accessToken) {
+            setStatus({ type: 'error', msg: 'Falta el token. Vuelve a pedir el correo.' });
+            setLoading(false);
+            return;
+        }
+
+        if (password.length < 6) {
+            setStatus({ type: 'error', msg: 'Mínimo 6 caracteres.' });
             setLoading(false);
             return;
         }
 
         try {
-            // 2. INYECCIÓN JUST-IN-TIME (El truco del experto)
-            // Antes de actualizar, FORZAMOS la sesión con el token que guardamos
-            console.log("💉 Inyectando sesión para autorización...");
+            console.log("🚀 Iniciando petición directa a la API...");
 
-            const { error: sessionError } = await supabase.auth.setSession({
-                access_token: recoveryToken,
-                refresh_token: refreshToken || recoveryToken, // Fallback si no hay refresh
+            // 2. LLAMADA DIRECTA A LA API (BYPASS DEL SDK)
+            // Endpoint estándar de Supabase Auth
+            const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,           // La llave pública
+                    'Authorization': `Bearer ${accessToken}` // <--- AQUÍ ESTÁ LA MAGIA
+                },
+                body: JSON.stringify({
+                    password: password
+                })
             });
 
-            if (sessionError) {
-                console.warn("Aviso de sesión:", sessionError.message);
-                // Intentamos seguir igualmente, a veces updateUser funciona si el token sigue vivo
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.msg || data.error_description || 'Error desconocido al actualizar');
             }
 
-            // 3. ACTUALIZACIÓN BLINDADA
-            const { error } = await supabase.auth.updateUser({
-                password: password
-            });
+            console.log("✅ Respuesta API:", data);
 
-            if (error) throw error;
-
-            setStatus({ type: 'success', msg: '✅ ¡CONTRASEÑA CAMBIADA! Entrando...' });
+            setStatus({ type: 'success', msg: '✅ ¡CONTRASEÑA CAMBIADA CORRECTAMENTE!' });
 
             setTimeout(() => {
                 navigate('/dashboard');
-            }, 1500);
+            }, 2000);
 
         } catch (error: any) {
-            console.error("Fallo al actualizar:", error);
-            setStatus({ type: 'error', msg: 'Error: ' + (error.message || 'Token expirado') });
+            console.error("Fallo directo:", error);
+            setStatus({ type: 'error', msg: 'Error: ' + error.message });
         } finally {
             setLoading(false);
         }
     };
+
+    if (!accessToken && !status.msg) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center animate-pulse text-gray-500 font-bold">
+                    Buscando llave maestra...
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100">
 
                 <div className="text-center mb-6">
-                    <span className="text-4xl">🔐</span>
-                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Nueva Contraseña</h2>
-                    {recoveryToken ? (
-                        <span className="text-xs font-mono text-green-600 bg-green-50 px-2 py-1 rounded">Token Seguro: OK</span>
-                    ) : (
-                        <span className="text-xs font-mono text-red-500 bg-red-50 px-2 py-1 rounded">Esperando Token...</span>
+                    <span className="text-4xl">🛠️</span>
+                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Restablecimiento Directo</h2>
+                    {accessToken && (
+                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-mono block mt-2">
+                            Modo API Directo Activo
+                        </span>
                     )}
                 </div>
 
-                <form onSubmit={handleReset} className="space-y-6">
+                <form onSubmit={handleDirectReset} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Clave</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Contraseña</label>
                         <input
                             type="password"
                             required
                             minLength={6}
                             className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="Escribe tu nueva clave"
+                            placeholder="Nueva clave definitiva"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
@@ -129,10 +133,10 @@ export const ResetPassword = () => {
 
                     <button
                         type="submit"
-                        disabled={loading || !recoveryToken}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={loading || !accessToken}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
                     >
-                        {loading ? 'Procesando...' : 'Cambiar Contraseña'}
+                        {loading ? 'Enviando a API...' : 'Cambiar Contraseña'}
                     </button>
                 </form>
             </div>
