@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 // Necesitamos las variables de entorno para montar la URL de la API a mano
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -11,24 +12,52 @@ export const ResetPassword = () => {
     const [loading, setLoading] = useState(false);
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [status, setStatus] = useState({ type: '', msg: '' });
+    const [isBootstrapComplete, setIsBootstrapComplete] = useState(false);
 
     useEffect(() => {
-        // 1. EXTRAER TOKEN PURO
-        const hash = window.location.hash;
-        console.log("🔍 Hash detectado:", hash);
+        const bootstrapSession = async () => {
+            // 1. EXTRAER TOKEN Y REFRESH TOKEN
+            const hash = window.location.hash;
+            console.log("🔍 [AuthRecovery] Hash detectado:", hash);
 
-        // Parsear manualmente para no depender de nadie
-        const params = new URLSearchParams(hash.replace('#', '?'));
-        const token = params.get('access_token');
+            // Parsear manualmente
+            const params = new URLSearchParams(hash.replace('#', '?'));
+            const token = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
 
-        if (token) {
-            console.log("🔑 Token capturado para uso directo.");
-            setAccessToken(token);
-            // Limpiar URL por estética
-            window.history.replaceState(null, '', window.location.pathname);
-        } else {
-            setStatus({ type: 'error', msg: 'No se encontró el token de seguridad. El enlace está roto.' });
-        }
+            if (token) {
+                console.log("🔑 [AuthRecovery] Token encontrado. Iniciando bootstrap...");
+                setAccessToken(token);
+
+                // ESTRATEGIA: Bootstrap de sesión (Intento de hidratar SDK)
+                // Aunque usamos Direct API Call, esto ayuda a que la app 'sienta' la sesión si es posible.
+                if (refreshToken) {
+                    try {
+                        const { error } = await supabase.auth.setSession({
+                            access_token: token,
+                            refresh_token: refreshToken,
+                        });
+                        if (error) console.warn("⚠️ [AuthRecovery] setSession warning:", error);
+                        else console.log("✅ [AuthRecovery] reset_bootstrap session_present=true");
+                    } catch (e) {
+                        console.warn("⚠️ [AuthRecovery] setSession failed (ignorable for Direct API Call):", e);
+                    }
+                } else {
+                    console.log("ℹ️ [AuthRecovery] No refresh_token found. Skipping full session hydration.");
+                }
+
+                // Limpiar URL por seguridad
+                window.history.replaceState(null, '', window.location.pathname);
+                setIsBootstrapComplete(true);
+
+            } else {
+                console.error("❌ [AuthRecovery] Token missing in hash.");
+                setStatus({ type: 'error', msg: 'Enlace inválido o expirado.' });
+                setIsBootstrapComplete(true);
+            }
+        };
+
+        bootstrapSession();
     }, []);
 
     const handleDirectReset = async (e: React.FormEvent) => {
@@ -37,28 +66,27 @@ export const ResetPassword = () => {
         setStatus({ type: '', msg: '' });
 
         if (!accessToken) {
-            setStatus({ type: 'error', msg: 'Falta el token. Vuelve a pedir el correo.' });
+            setStatus({ type: 'error', msg: 'Falta el token de seguridad.' });
             setLoading(false);
             return;
         }
 
         if (password.length < 6) {
-            setStatus({ type: 'error', msg: 'Mínimo 6 caracteres.' });
+            setStatus({ type: 'error', msg: 'La contraseña debe tener al menos 6 caracteres.' });
             setLoading(false);
             return;
         }
 
         try {
-            console.log("🚀 Iniciando petición directa a la API...");
+            console.log("🚀 [AuthRecovery] Iniciando petición directa a la API...");
 
-            // 2. LLAMADA DIRECTA A LA API (BYPASS DEL SDK)
-            // Endpoint estándar de Supabase Auth
+            // 2. LLAMADA DIRECTA A LA API (BYPASS DEL SDK - ESTRATEGIA 2)
             const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'apikey': SUPABASE_ANON_KEY,           // La llave pública
-                    'Authorization': `Bearer ${accessToken}` // <--- AQUÍ ESTÁ LA MAGIA
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${accessToken}`
                 },
                 body: JSON.stringify({
                     password: password
@@ -71,73 +99,101 @@ export const ResetPassword = () => {
                 throw new Error(data.msg || data.error_description || 'Error desconocido al actualizar');
             }
 
-            console.log("✅ Respuesta API:", data);
-
+            console.log("✅ [AuthRecovery] Respuesta API:", data);
             setStatus({ type: 'success', msg: '✅ ¡CONTRASEÑA CAMBIADA CORRECTAMENTE!' });
 
+            // LIMPIEZA FINAL
+            await supabase.auth.signOut(); // Cerramos para obligar a login limpio
+
             setTimeout(() => {
-                navigate('/dashboard');
-            }, 2000);
+                navigate('/');
+            }, 3000);
 
         } catch (error: any) {
-            console.error("Fallo directo:", error);
+            console.error("❌ [AuthRecovery] Fallo directo:", error);
             setStatus({ type: 'error', msg: 'Error: ' + error.message });
         } finally {
             setLoading(false);
         }
     };
 
-    if (!accessToken && !status.msg) {
+    // UI: CARGANDO BOOTSTRAP
+    if (!isBootstrapComplete) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-center animate-pulse text-gray-500 font-bold">
-                    Buscando llave maestra...
+                <svg className="animate-spin h-8 w-8 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+                </svg>
+            </div>
+        );
+    }
+
+    // UI: LINK INVÁLIDO
+    if (!accessToken && status.type === 'error') {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-red-100 text-center">
+                    <span className="text-4xl">⚠️</span>
+                    <h2 className="text-xl font-bold text-gray-800 mt-4">Enlace no válido</h2>
+                    <p className="text-gray-500 mt-2 mb-6">Este enlace de recuperación ha expirado o ya ha sido utilizado.</p>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition"
+                    >
+                        Volver al Inicio
+                    </button>
                 </div>
             </div>
         );
     }
 
+    // UI: FORMULARIO
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-xl p-8 border border-gray-100">
 
                 <div className="text-center mb-6">
-                    <span className="text-4xl">🛠️</span>
-                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Restablecimiento Directo</h2>
-                    {accessToken && (
-                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-mono block mt-2">
-                            Modo API Directo Activo
-                        </span>
-                    )}
+                    <span className="text-4xl">🔐</span>
+                    <h2 className="text-2xl font-bold text-gray-800 mt-2">Nueva Contraseña</h2>
+                    <p className="text-sm text-gray-500">Introduce tu nueva clave para acceder.</p>
                 </div>
 
                 <form onSubmit={handleDirectReset} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">Nueva Contraseña</label>
                         <input
                             type="password"
                             required
                             minLength={6}
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none"
-                            placeholder="Nueva clave definitiva"
+                            disabled={loading || status.type === 'success'}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none transition disabled:bg-gray-100"
+                            placeholder="Introduce nueva contraseña"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
 
                     {status.msg && (
-                        <div className={`p-3 rounded-lg text-sm font-bold text-center ${status.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        <div className={`p-3 rounded-lg text-sm font-bold text-center animate-in fade-in slide-in-from-top-2 ${status.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                             {status.msg}
                         </div>
                     )}
 
-                    <button
-                        type="submit"
-                        disabled={loading || !accessToken}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50"
-                    >
-                        {loading ? 'Enviando a API...' : 'Cambiar Contraseña'}
-                    </button>
+                    {!status.type.includes('success') && (
+                        <button
+                            type="submit"
+                            disabled={loading || !password}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {loading && (
+                                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+                                </svg>
+                            )}
+                            {loading ? 'Guardando...' : 'Actualizar Contraseña'}
+                        </button>
+                    )}
                 </form>
             </div>
         </div>

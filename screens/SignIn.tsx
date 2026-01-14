@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { UI_TEXT } from '../constants';
@@ -15,27 +14,17 @@ const SignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
 
-  // Recovery Modal State
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-
   // Login Fix States
   const [showResendButton, setShowResendButton] = useState(false);
   const [timeoutError, setTimeoutError] = useState(false);
 
   useEffect(() => {
-    // 1. Detect recovery mode from hash or route
-    const isRecoveryPath = location.pathname === '/reset-password' || window.location.hash.includes('type=recovery');
-    if (isRecoveryPath) {
-      setShowResetModal(true);
-    }
-
-    // 2. Listen for AUTH events (Supabase specialized recovery event)
+    // Escuchar eventos de AUTH solo para debug o limpieza, 
+    // pero IGNORAMOS PASSWORD_RECOVERY aquí para que lo maneje ResetPassword.tsx
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setShowResetModal(true);
+        console.log("⚠️ [SignIn] Evento PASSWORD_RECOVERY ignorado localmente. Delegando a /reset-password.");
+        // No hacemos nada, dejamos que App.tsx redirija.
       }
     });
 
@@ -45,44 +34,6 @@ const SignIn: React.FC = () => {
   const showToast = (message: string, type: 'error' | 'success' = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 6000);
-  };
-
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword.length < 8) {
-      showToast('La nueva contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showToast('Las contraseñas no coinciden.');
-      return;
-    }
-
-    setResetLoading(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-
-      showToast('Contraseña actualizada con éxito. Ya puedes iniciar sesión.', 'success');
-
-      // Cleanup
-      setShowResetModal(false);
-      setNewPassword('');
-      setConfirmPassword('');
-      await signOut(); // Ensure session is clean
-
-      navigate('/', { replace: true });
-    } catch (err: any) {
-      console.error('Update password error:', err);
-      showToast('El enlace de recuperación ha expirado o no es válido. Solicita uno nuevo.');
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
-  const closeResetModal = () => {
-    setShowResetModal(false);
-    navigate('/', { replace: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -311,84 +262,6 @@ const SignIn: React.FC = () => {
       <footer className="py-6 text-center text-[#60798a] text-xs">
         <p>© 2024 {UI_TEXT.APP_NAME}. Todos los derechos reservados.</p>
       </footer>
-
-      {/* RECOVERY MODAL (SUBCAPA) */}
-      {showResetModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-[440px] bg-white dark:bg-[#1a262f] rounded-2xl shadow-2xl border border-white/10 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-8">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold">Cambiar Contraseña</h2>
-                  <p className="text-sm text-[#60798a] mt-1 text-left">Introduce tu nueva clave de acceso</p>
-                </div>
-                <button onClick={closeResetModal} className="text-[#60798a] hover:bg-gray-100 dark:hover:bg-white/5 p-1 rounded-full transition-colors">
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdatePassword} className="space-y-5">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-left">Nueva contraseña</label>
-                  <div className="relative">
-                    <input
-                      className="w-full rounded-xl border-[#dbe1e6] dark:border-[#2a3942] bg-white dark:bg-[#101a22] h-12 pl-11 pr-4 focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
-                      type="password"
-                      placeholder="Mínimo 8 caracteres"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#60798a]">
-                      <span className="material-symbols-outlined text-[22px]">lock</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-left">Repetir contraseña</label>
-                  <div className="relative">
-                    <input
-                      className="w-full rounded-xl border-[#dbe1e6] dark:border-[#2a3942] bg-white dark:bg-[#101a22] h-12 pl-11 pr-4 focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
-                      type="password"
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#60798a]">
-                      <span className="material-symbols-outlined text-[22px]">lock</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={closeResetModal}
-                    className="flex-1 h-12 rounded-xl border border-[#dbe1e6] dark:border-[#2a3942] text-sm font-bold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={resetLoading}
-                    className="flex-2 px-6 h-12 bg-primary hover:bg-[#1a8de0] text-white font-bold rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {resetLoading ? (
-                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
-                      </svg>
-                    ) : null}
-                    <span>Guardar contraseña</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
