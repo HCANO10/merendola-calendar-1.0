@@ -77,7 +77,15 @@ export default function App() {
       <AuthRedirectHandler />
       <Routes>
         {/* RUTAS PÚBLICAS */}
-        <Route path="/" element={!session ? <SignIn /> : <Navigate to="/dashboard" />} />
+        <Route path="/" element={
+          !session
+            ? (
+              window.location.hash.includes('reset-password')
+                ? (() => { console.log("[AuthRecovery] bypass_auth_redirect_on_reset=true"); return <Navigate to="/reset-password" replace />; })()
+                : <SignIn />
+            )
+            : <Navigate to="/dashboard" />
+        } />
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* RUTAS PRIVADAS */}
@@ -86,7 +94,11 @@ export default function App() {
         <Route path="/profile" element={session ? <MainLayout><Profile /></MainLayout> : <Navigate to="/" />} />
 
         {/* CATCH-ALL */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={
+          window.location.hash.includes('reset-password')
+            ? (() => { console.log("[AuthRecovery] bypass_auth_redirect_on_reset=true"); return <Navigate to="/reset-password" replace />; })()
+            : <Navigate to="/" />
+        } />
       </Routes>
     </Router>
   );

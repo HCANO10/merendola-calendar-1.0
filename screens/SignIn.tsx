@@ -19,12 +19,13 @@ const SignIn: React.FC = () => {
   const [timeoutError, setTimeoutError] = useState(false);
 
   useEffect(() => {
+    console.log("[AuthRecoveryDebug] mounted SignIn");
     // Escuchar eventos de AUTH solo para debug o limpieza, 
     // pero IGNORAMOS PASSWORD_RECOVERY aquí para que lo maneje ResetPassword.tsx
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
-        console.log("⚠️ [SignIn] Evento PASSWORD_RECOVERY ignorado localmente. Delegando a /reset-password.");
-        // No hacemos nada, dejamos que App.tsx redirija.
+        console.log("[AuthRecovery] SignIn_ignoring_PASSWORD_RECOVERY=true");
+        // No hacemos nada, dejamos que App.tsx o ResetPassword manejen el flujo.
       }
     });
 

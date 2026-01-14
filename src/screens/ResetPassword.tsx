@@ -15,15 +15,40 @@ export const ResetPassword = () => {
     const [isBootstrapComplete, setIsBootstrapComplete] = useState(false);
 
     useEffect(() => {
+        console.log("[AuthRecoveryDebug] mounted ResetPassword");
         const bootstrapSession = async () => {
             // 1. EXTRAER TOKEN Y REFRESH TOKEN
-            const hash = window.location.hash;
+            let hash = window.location.hash;
             console.log("🔍 [AuthRecovery] Hash detectado:", hash);
 
+            // Intentar recuperar fragmento capturado por index.tsx (Fix Doble Hash)
+            const capturedFragment = sessionStorage.getItem('sb-recovery-fragment');
+            if (capturedFragment) {
+                console.log("📦 [AuthRecovery] Found captured fragment in storage. Using it.");
+                hash = '#' + capturedFragment; // Simular que vino del hash
+
+                // Limpiar storage para no reutilizarlo erróneamente
+                sessionStorage.removeItem('sb-recovery-fragment');
+                sessionStorage.removeItem('sb-recovery-active');
+            }
+
             // Parsear manualmente
-            const params = new URLSearchParams(hash.replace('#', '?'));
-            const token = params.get('access_token');
-            const refreshToken = params.get('refresh_token');
+            // Nota: manejar tanto /#/reset-password#access_token... como search params
+            const params = new URLSearchParams(hash.substring(hash.indexOf('#', 1) + 1) || hash.replace('#', '?'));
+
+            // Fix robustez: si el hash es solo "#/reset-password", params estará vacío o mal.
+            // Si usamos el capturedFragment, ese string suele ser "access_token=...&..." 
+            // así que new URLSearchParams(capturedFragment) funciona directo.
+
+            let token = params.get('access_token');
+            let refreshToken = params.get('refresh_token');
+
+            // Fallback directo si params falló por formato raro
+            if (!token && capturedFragment) {
+                const directParams = new URLSearchParams(capturedFragment);
+                token = directParams.get('access_token');
+                refreshToken = directParams.get('refresh_token');
+            }
 
             if (token) {
                 console.log("🔑 [AuthRecovery] Token encontrado. Iniciando bootstrap...");
@@ -51,7 +76,7 @@ export const ResetPassword = () => {
                 setIsBootstrapComplete(true);
 
             } else {
-                console.error("❌ [AuthRecovery] Token missing in hash.");
+                console.error("❌ [AuthRecovery] Token missing in hash or storage.");
                 setStatus({ type: 'error', msg: 'Enlace inválido o expirado.' });
                 setIsBootstrapComplete(true);
             }
